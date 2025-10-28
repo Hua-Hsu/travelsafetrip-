@@ -1,5 +1,5 @@
 // ================================
-// Week 4: 群組地圖頁面
+// Week 4: 群組地圖頁面 + Meet Up Point
 // app/groups/[id]/map/page.tsx
 // ================================
 
@@ -30,6 +30,19 @@ export default function GroupMapPage() {
   const [selectedMember, setSelectedMember] = useState<MemberLocation | null>(null);
   const [viewMode, setViewMode] = useState<'map' | 'list'>('map');
 
+  // 集合點相關狀態
+  const [meetupPoint, setMeetupPoint] = useState<{
+    latitude: number;
+    longitude: number;
+    updated_by?: string;
+    updated_at?: string;
+  } | null>(null);
+  const [showMeetupDialog, setShowMeetupDialog] = useState(false);
+  const [tempMeetupLocation, setTempMeetupLocation] = useState<{
+    latitude: number;
+    longitude: number;
+  } | null>(null);
+
   // 獲取或創建 device ID
   useEffect(() => {
     const storedDeviceId = localStorage.getItem('device_id');
@@ -49,7 +62,7 @@ export default function GroupMapPage() {
     const loadGroup = async () => {
       const { data, error } = await supabase
         .from('groups')
-        .select('name')
+        .select('name, meetup_latitude, meetup_longitude, meetup_updated_at, meetup_updated_by')
         .eq('id', groupId)
         .single();
 
@@ -60,6 +73,17 @@ export default function GroupMapPage() {
       }
 
       setGroupName(data.name);
+      
+      // 載入集合點（如果有的話）
+      if (data.meetup_latitude && data.meetup_longitude) {
+        setMeetupPoint({
+          latitude: data.meetup_latitude,
+          longitude: data.meetup_longitude,
+          updated_by: data.meetup_updated_by,
+          updated_at: data.meetup_updated_at
+        });
+      }
+      
       setLoading(false);
     };
 
@@ -102,7 +126,7 @@ export default function GroupMapPage() {
         },
         (payload) => {
           console.log('Location update:', payload);
-          loadMembers(); // 重新載入所有成員
+          loadMembers();
         }
       )
       .subscribe();
@@ -112,26 +136,74 @@ export default function GroupMapPage() {
     };
   }, [groupId, deviceId]);
 
+  // 訂閱集合點更新
+  useEffect(() => {
+    if (!groupId) return;
+
+    const channel = supabase
+      .channel(`group-meetup-${groupId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'groups',
+          filter: `id=eq.${groupId}`
+        },
+        (payload: any) => {
+          console.log('Meetup point update:', payload);
+          if (payload.new.meetup_latitude && payload.new.meetup_longitude) {
+            setMeetupPoint({
+              latitude: payload.new.meetup_latitude,
+              longitude: payload.new.meetup_longitude,
+              updated_by: payload.new.meetup_updated_by,
+              updated_at: payload.new.meetup_updated_at
+            });
+          } else {
+            setMeetupPoint(null);
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [groupId]);
+
   // 當當前位置改變時，重新計算距離
   useEffect(() => {
     if (currentLocation) {
       updateMembersWithDistance(members);
     }
-  }, [currentLocation]);
+  }, [currentLocation, meetupPoint]);
 
   // 更新成員列表並計算距離
   const updateMembersWithDistance = (memberData: MemberLocation[]) => {
     const updatedMembers = memberData.map(member => {
+      const distances: any = {};
+      
+      // 計算與當前用戶的距離
       if (currentLocation) {
-        const distance = calculateDistance(
+        distances.distance = calculateDistance(
           currentLocation.latitude,
           currentLocation.longitude,
           member.latitude,
           member.longitude
         );
-        return { ...member, distance };
       }
-      return member;
+
+      // 計算與集合點的距離
+      if (meetupPoint) {
+        distances.meetupDistance = calculateDistance(
+          meetupPoint.latitude,
+          meetupPoint.longitude,
+          member.latitude,
+          member.longitude
+        );
+      }
+
+      return { ...member, ...distances };
     });
 
     setMembers(updatedMembers);
@@ -146,6 +218,64 @@ export default function GroupMapPage() {
   const handleMemberClick = (member: MemberLocation) => {
     setSelectedMember(member);
     setViewMode('map');
+  };
+
+  // 設定集合點
+  const handleSetMeetupPoint = async (latitude: number, longitude: number) => {
+    try {
+      const { error } = await supabase
+        .from('groups')
+        .update({
+          meetup_latitude: latitude,
+          meetup_longitude: longitude,
+          meetup_updated_at: new Date().toISOString(),
+          meetup_updated_by: deviceId
+        })
+        .eq('id', groupId);
+
+      if (error) throw error;
+
+      setMeetupPoint({
+        latitude,
+        longitude,
+        updated_by: deviceId,
+        updated_at: new Date().toISOString()
+      });
+
+      setShowMeetupDialog(false);
+      setTempMeetupLocation(null);
+    } catch (error) {
+      console.error('Failed to set meetup point:', error);
+      alert('Failed to set meetup point');
+    }
+  };
+
+  // 清除集合點
+  const handleClearMeetupPoint = async () => {
+    try {
+      const { error } = await supabase
+        .from('groups')
+        .update({
+          meetup_latitude: null,
+          meetup_longitude: null,
+          meetup_updated_at: null,
+          meetup_updated_by: null
+        })
+        .eq('id', groupId);
+
+      if (error) throw error;
+
+      setMeetupPoint(null);
+    } catch (error) {
+      console.error('Failed to clear meetup point:', error);
+      alert('Failed to clear meetup point');
+    }
+  };
+
+  // 處理地圖長按
+  const handleMapLongPress = (latitude: number, longitude: number) => {
+    setTempMeetupLocation({ latitude, longitude });
+    setShowMeetupDialog(true);
   };
 
   if (loading) {
@@ -228,6 +358,70 @@ export default function GroupMapPage() {
               onLocationUpdate={handleLocationUpdate}
             />
 
+            {/* 集合點控制 */}
+            <div className="bg-white rounded-lg shadow p-4">
+              <h3 className="text-lg font-semibold mb-3">Meet Up Point</h3>
+              
+              {meetupPoint ? (
+                <div>
+                  <div className="mb-3 p-3 bg-red-50 border border-red-200 rounded-lg">
+                    <p className="text-sm text-red-700 mb-1">
+                      📍 Meet up point is set
+                    </p>
+                    <p className="text-xs text-red-600">
+                      {meetupPoint.latitude.toFixed(6)}, {meetupPoint.longitude.toFixed(6)}
+                    </p>
+                    {currentLocation && (
+                      <p className="text-xs text-red-600 mt-1">
+                        Your distance: {calculateDistance(
+                          currentLocation.latitude,
+                          currentLocation.longitude,
+                          meetupPoint.latitude,
+                          meetupPoint.longitude
+                        ).toFixed(2)} km
+                      </p>
+                    )}
+                  </div>
+                  <button
+                    onClick={handleClearMeetupPoint}
+                    className="w-full bg-red-500 hover:bg-red-600 text-white py-2 px-4 rounded-lg transition-colors"
+                  >
+                    Clear Meet Up Point
+                  </button>
+                </div>
+              ) : (
+                <div>
+                  <p className="text-sm text-gray-600 mb-3">
+                    Right-click on map (desktop) or long-press (mobile) to set meet up point
+                  </p>
+                  
+                  {/* 測試按鈕 */}
+                  <button
+                    onClick={() => {
+                      if (currentLocation) {
+                        setTempMeetupLocation({
+                          latitude: currentLocation.latitude,
+                          longitude: currentLocation.longitude
+                        });
+                        setShowMeetupDialog(true);
+                      } else {
+                        alert('Please start tracking first to get your location');
+                      }
+                    }}
+                    className="w-full mb-3 bg-green-500 hover:bg-green-600 text-white py-2 px-4 rounded-lg transition-colors font-semibold"
+                  >
+                    🧪 Test: Set Meetup at My Location
+                  </button>
+                  
+                  <div className="p-3 bg-gray-50 rounded-lg">
+                    <p className="text-xs text-gray-500">
+                      💡 Tip: All members can see the meet up point and their distance to it
+                    </p>
+                  </div>
+                </div>
+              )}
+            </div>
+
             {/* 當前位置資訊 */}
             {currentLocation && (
               <div className="bg-white rounded-lg shadow p-4">
@@ -258,7 +452,12 @@ export default function GroupMapPage() {
                 </div>
                 {selectedMember.distance && (
                   <p className="text-sm text-blue-700 mb-2">
-                    Distance: {selectedMember.distance.toFixed(2)} km
+                    Distance to you: {selectedMember.distance.toFixed(2)} km
+                  </p>
+                )}
+                {(selectedMember as any).meetupDistance && meetupPoint && (
+                  <p className="text-sm text-red-700 mb-2">
+                    Distance to meetup: {(selectedMember as any).meetupDistance.toFixed(2)} km
                   </p>
                 )}
                 <button
@@ -282,7 +481,9 @@ export default function GroupMapPage() {
                 <MapView
                   members={members}
                   currentLocation={currentLocation || undefined}
+                  meetupPoint={meetupPoint ?? undefined}
                   onMemberClick={handleMemberClick}
+                  onMapLongPress={handleMapLongPress}
                 />
               </div>
             ) : (
@@ -302,12 +503,44 @@ export default function GroupMapPage() {
             <li>1. Click "Start Tracking" to enable location sharing</li>
             <li>2. Allow browser to access your location</li>
             <li>3. Your location will be automatically updated every 10 seconds</li>
-            <li>4. Click on member markers on the map to view details</li>
-            <li>5. Click "View Route in Google Maps" to plan navigation</li>
+            <li>4. Right-click on map (or use test button) to set a meet up point</li>
+            <li>5. Click on member markers on the map to view details</li>
+            <li>6. Click "View Route in Google Maps" to plan navigation</li>
           </ul>
         </div>
       </main>
+
+      {/* 集合點確認對話框 */}
+      {showMeetupDialog && tempMeetupLocation && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg p-6 max-w-md w-full">
+            <h3 className="text-lg font-semibold mb-3">Set Meet Up Point?</h3>
+            <p className="text-sm text-gray-600 mb-4">
+              Set the meet up point at this location?
+            </p>
+            <div className="text-xs text-gray-500 mb-4 font-mono">
+              {tempMeetupLocation.latitude.toFixed(6)}, {tempMeetupLocation.longitude.toFixed(6)}
+            </div>
+            <div className="flex gap-3">
+              <button
+                onClick={() => {
+                  setShowMeetupDialog(false);
+                  setTempMeetupLocation(null);
+                }}
+                className="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => handleSetMeetupPoint(tempMeetupLocation.latitude, tempMeetupLocation.longitude)}
+                className="flex-1 px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600"
+              >
+                Set Meet Up Point
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
-
