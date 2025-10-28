@@ -65,55 +65,62 @@ export default function MapView({
     );
 
     // 地圖載入完成
-    map.current.on('load', () => {
-      setMapLoaded(true);
-    });
+map.current.on('load', () => {
+  setMapLoaded(true);
+});
 
-    // 處理長按事件（設定集合點）
-    let longPressTimer: NodeJS.Timeout;
-    let longPressTriggered = false;
+// 處理集合點設定（電腦端：右鍵點擊，手機端：長按）
+let longPressTimer: any = null;
+let pressStartTime = 0;
+let startPos = { x: 0, y: 0 };
 
-    map.current.on('mousedown', (e) => {
-      longPressTriggered = false;
-      longPressTimer = setTimeout(() => {
-        longPressTriggered = true;
-        if (onMapLongPress) {
-          onMapLongPress(e.lngLat.lat, e.lngLat.lng);
-        }
-      }, 500); // 500ms 長按
-    });
+// 電腦端：右鍵點擊設定集合點
+map.current.on('contextmenu', (e) => {
+  e.preventDefault();
+  console.log('Right click detected:', e.lngLat);
+  if (onMapLongPress) {
+    onMapLongPress(e.lngLat.lat, e.lngLat.lng);
+  }
+});
 
-    map.current.on('mouseup', () => {
-      clearTimeout(longPressTimer);
-    });
-
-    map.current.on('mousemove', () => {
-      clearTimeout(longPressTimer);
-    });
-
-    // 手機端觸控事件
-    map.current.on('touchstart', (e: any) => {
-      if (e.originalEvent.touches.length === 1) {
-        longPressTriggered = false;
-        const touch = e.originalEvent.touches[0];
-        const point = map.current!.unproject([touch.clientX, touch.clientY]);
-        
-        longPressTimer = setTimeout(() => {
-          longPressTriggered = true;
-          if (onMapLongPress) {
-            onMapLongPress(point.lat, point.lng);
-          }
-        }, 500);
+// 手機端：長按設定集合點
+map.current.on('touchstart', (e: any) => {
+  if (e.originalEvent.touches.length === 1) {
+    pressStartTime = Date.now();
+    const touch = e.originalEvent.touches[0];
+    startPos = { x: touch.clientX, y: touch.clientY };
+    
+    const point = map.current!.unproject([touch.clientX, touch.clientY]);
+    
+    if (longPressTimer) clearTimeout(longPressTimer);
+    
+    longPressTimer = setTimeout(() => {
+      console.log('Long press detected:', point);
+      if (onMapLongPress) {
+        onMapLongPress(point.lat, point.lng);
       }
-    });
+    }, 800);
+  }
+});
 
-    map.current.on('touchend', () => {
-      clearTimeout(longPressTimer);
-    });
+map.current.on('touchend', () => {
+  if (longPressTimer) {
+    clearTimeout(longPressTimer);
+    longPressTimer = null;
+  }
+});
 
-    map.current.on('touchmove', () => {
+map.current.on('touchmove', (e: any) => {
+  if (e.originalEvent.touches.length === 1) {
+    const touch = e.originalEvent.touches[0];
+    const moved = Math.abs(touch.clientX - startPos.x) > 10 || 
+                  Math.abs(touch.clientY - startPos.y) > 10;
+    if (moved && longPressTimer) {
       clearTimeout(longPressTimer);
-    });
+      longPressTimer = null;
+    }
+  }
+});
 
     // 清理函數
     return () => {
