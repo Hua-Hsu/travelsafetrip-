@@ -1,5 +1,5 @@
 // ================================
-// Week 4: 地圖顯示組件
+// Week 4: 地圖顯示組件 + Meet Up Point
 // components/MapView.tsx
 // ================================
 
@@ -13,13 +13,22 @@ import { MemberLocation, calculateBounds } from '@/lib/locationUtils';
 interface MapViewProps {
   members: MemberLocation[];
   currentLocation?: { latitude: number; longitude: number };
+  meetupPoint?: { latitude: number; longitude: number };
   onMemberClick?: (member: MemberLocation) => void;
+  onMapLongPress?: (latitude: number, longitude: number) => void;
 }
 
-export default function MapView({ members, currentLocation, onMemberClick }: MapViewProps) {
+export default function MapView({ 
+  members, 
+  currentLocation, 
+  meetupPoint,
+  onMemberClick,
+  onMapLongPress 
+}: MapViewProps) {
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<mapboxgl.Map | null>(null);
   const markers = useRef<Map<string, mapboxgl.Marker>>(new Map());
+  const meetupMarker = useRef<mapboxgl.Marker | null>(null);
   const [mapLoaded, setMapLoaded] = useState(false);
 
   // 初始化地圖
@@ -60,14 +69,113 @@ export default function MapView({ members, currentLocation, onMemberClick }: Map
       setMapLoaded(true);
     });
 
+    // 處理長按事件（設定集合點）
+    let longPressTimer: NodeJS.Timeout;
+    let longPressTriggered = false;
+
+    map.current.on('mousedown', (e) => {
+      longPressTriggered = false;
+      longPressTimer = setTimeout(() => {
+        longPressTriggered = true;
+        if (onMapLongPress) {
+          onMapLongPress(e.lngLat.lat, e.lngLat.lng);
+        }
+      }, 500); // 500ms 長按
+    });
+
+    map.current.on('mouseup', () => {
+      clearTimeout(longPressTimer);
+    });
+
+    map.current.on('mousemove', () => {
+      clearTimeout(longPressTimer);
+    });
+
+    // 手機端觸控事件
+    map.current.on('touchstart', (e: any) => {
+      if (e.originalEvent.touches.length === 1) {
+        longPressTriggered = false;
+        const touch = e.originalEvent.touches[0];
+        const point = map.current!.unproject([touch.clientX, touch.clientY]);
+        
+        longPressTimer = setTimeout(() => {
+          longPressTriggered = true;
+          if (onMapLongPress) {
+            onMapLongPress(point.lat, point.lng);
+          }
+        }, 500);
+      }
+    });
+
+    map.current.on('touchend', () => {
+      clearTimeout(longPressTimer);
+    });
+
+    map.current.on('touchmove', () => {
+      clearTimeout(longPressTimer);
+    });
+
     // 清理函數
     return () => {
       markers.current.forEach(marker => marker.remove());
       markers.current.clear();
+      if (meetupMarker.current) {
+        meetupMarker.current.remove();
+      }
       map.current?.remove();
       map.current = null;
     };
   }, []);
+
+  // 更新集合點標記
+  useEffect(() => {
+    if (!map.current || !mapLoaded) return;
+
+    if (meetupPoint) {
+      if (!meetupMarker.current) {
+        // 創建集合點標記（紅色大 PIN）
+        const el = document.createElement('div');
+        el.className = 'meetup-marker';
+        el.innerHTML = `
+          <div style="
+            width: 40px;
+            height: 40px;
+            background-color: #ef4444;
+            border: 4px solid white;
+            border-radius: 50% 50% 50% 0;
+            transform: rotate(-45deg);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.3);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+          ">
+            <span style="
+              transform: rotate(45deg);
+              font-size: 20px;
+            ">📍</span>
+          </div>
+        `;
+
+        meetupMarker.current = new mapboxgl.Marker(el)
+          .setLngLat([meetupPoint.longitude, meetupPoint.latitude])
+          .setPopup(
+            new mapboxgl.Popup({ offset: 25 })
+              .setHTML('<strong>Meet Up Point</strong>')
+          )
+          .addTo(map.current);
+      } else {
+        // 更新位置
+        meetupMarker.current.setLngLat([meetupPoint.longitude, meetupPoint.latitude]);
+      }
+    } else {
+      // 移除集合點標記
+      if (meetupMarker.current) {
+        meetupMarker.current.remove();
+        meetupMarker.current = null;
+      }
+    }
+  }, [meetupPoint, mapLoaded]);
 
   // 更新當前用戶位置標記
   useEffect(() => {
@@ -92,7 +200,7 @@ export default function MapView({ members, currentLocation, onMemberClick }: Map
         .setLngLat([currentLocation.longitude, currentLocation.latitude])
         .setPopup(
           new mapboxgl.Popup({ offset: 25 })
-            .setHTML('<strong>你的位置</strong>')
+            .setHTML('<strong>Your Location</strong>')
         )
         .addTo(map.current);
 
@@ -145,10 +253,12 @@ export default function MapView({ members, currentLocation, onMemberClick }: Map
           onMemberClick?.(member);
         });
 
+        const meetupDistance = (member as any).meetupDistance;
         const popup = new mapboxgl.Popup({ offset: 25 }).setHTML(`
           <div style="padding: 8px;">
             <strong>${member.device_name}</strong>
-            ${member.distance ? `<br/><small>距離: ${member.distance.toFixed(2)}km</small>` : ''}
+            ${member.distance ? `<br/><small>Distance to you: ${member.distance.toFixed(2)}km</small>` : ''}
+            ${meetupDistance ? `<br/><small style="color: #ef4444;">Distance to meetup: ${meetupDistance.toFixed(2)}km</small>` : ''}
           </div>
         `);
 
@@ -164,11 +274,13 @@ export default function MapView({ members, currentLocation, onMemberClick }: Map
         
         // 更新 popup 內容
         const popup = marker.getPopup();
+        const meetupDistance = (member as any).meetupDistance;
         if (popup) {
           popup.setHTML(`
             <div style="padding: 8px;">
               <strong>${member.device_name}</strong>
-              ${member.distance ? `<br/><small>距離: ${member.distance.toFixed(2)}km</small>` : ''}
+              ${member.distance ? `<br/><small>Distance to you: ${member.distance.toFixed(2)}km</small>` : ''}
+              ${meetupDistance ? `<br/><small style="color: #ef4444;">Distance to meetup: ${meetupDistance.toFixed(2)}km</small>` : ''}
             </div>
           `);
         }
@@ -176,10 +288,11 @@ export default function MapView({ members, currentLocation, onMemberClick }: Map
     });
 
     // 調整地圖視野以包含所有標記
-    if (members.length > 0 || currentLocation) {
+    if (members.length > 0 || currentLocation || meetupPoint) {
       const allLocations = [
         ...members.map(m => ({ latitude: m.latitude, longitude: m.longitude })),
-        ...(currentLocation ? [currentLocation] : [])
+        ...(currentLocation ? [currentLocation] : []),
+        ...(meetupPoint ? [meetupPoint] : [])
       ];
 
       const bounds = calculateBounds(allLocations);
@@ -196,7 +309,7 @@ export default function MapView({ members, currentLocation, onMemberClick }: Map
         );
       }
     }
-  }, [members, mapLoaded, onMemberClick]);
+  }, [members, mapLoaded, onMemberClick, meetupPoint]);
 
   return (
     <div className="relative w-full h-full">
@@ -206,7 +319,7 @@ export default function MapView({ members, currentLocation, onMemberClick }: Map
         <div className="absolute inset-0 flex items-center justify-center bg-gray-100 rounded-lg">
           <div className="text-center">
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto mb-4"></div>
-            <p className="text-gray-600">載入地圖中...</p>
+            <p className="text-gray-600">Loading map...</p>
           </div>
         </div>
       )}
@@ -215,14 +328,28 @@ export default function MapView({ members, currentLocation, onMemberClick }: Map
       <div className="absolute bottom-4 left-4 bg-white rounded-lg shadow-lg p-3">
         <div className="flex items-center gap-2 mb-2">
           <div className="w-4 h-4 rounded-full bg-blue-500 border-2 border-white"></div>
-          <span className="text-sm">你的位置</span>
+          <span className="text-sm">Your Location</span>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 mb-2">
           <div className="w-4 h-4 rounded-full bg-red-500 border-2 border-white"></div>
-          <span className="text-sm">其他成員</span>
+          <span className="text-sm">Other Members</span>
         </div>
+        {meetupPoint && (
+          <div className="flex items-center gap-2">
+            <div className="text-lg">📍</div>
+            <span className="text-sm">Meet Up Point</span>
+          </div>
+        )}
       </div>
+
+      {/* 長按提示 */}
+      {!meetupPoint && (
+        <div className="absolute top-4 left-4 bg-yellow-50 border border-yellow-200 rounded-lg p-2 shadow-lg">
+          <p className="text-xs text-yellow-800">
+            💡 Long press on map to set meet up point
+          </p>
+        </div>
+      )}
     </div>
   );
 }
-
