@@ -1,0 +1,57 @@
+// mobile/app.json
+{
+  "expo": {
+    "name": "GroupProject",
+    "slug": "group-project",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#ffffff"
+    },
+    "scheme": "myapp",
+    "plugins": [
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "允許 $(PRODUCT_NAME) 使用相機以掃描 QR Code"
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "允許 $(PRODUCT_NAME) 存取相簿以選擇 QR Code 圖片"
+        }
+      ]
+    ],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.yourcompany.groupproject"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#ffffff"
+      },
+      "package": "com.yourcompany.groupproject",
+      "intentFilters": [
+        {
+          "action": "VIEW",
+          "autoVerify": true,
+          "data": [
+            {
+              "scheme": "myapp"
+            }
+          ],
+          "category": ["BROWSABLE", "DEFAULT"]
+        }
+      ]
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    }
+  }
+}
