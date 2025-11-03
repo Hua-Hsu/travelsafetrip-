@@ -1,5 +1,5 @@
 // ================================
-// Week 4-5: 群組地圖頁面 + Meet Up Point (優化版)
+// Week 5: 群組地圖頁面 - 完整版（Task 1-3）
 // app/groups/[id]/map/page.tsx
 // ================================
 
@@ -11,6 +11,8 @@ import { supabase } from '@/lib/supabase';
 import MapView from '@/components/MapView';
 import LocationTracker from '@/components/LocationTracker';
 import MemberList from '@/components/MemberList';
+import TutorialOverlay from '@/components/TutorialOverlay';
+import QuickShareButtons from '@/components/QuickShareButtons';
 import {
   MemberLocation,
   LocationData,
@@ -24,12 +26,20 @@ export default function GroupMapPage() {
   const mapViewRef = useRef<any>(null);
 
   const [deviceId, setDeviceId] = useState<string>('');
+  const [deviceName, setDeviceName] = useState<string>('');
   const [groupName, setGroupName] = useState<string>('');
   const [currentLocation, setCurrentLocation] = useState<LocationData | null>(null);
   const [members, setMembers] = useState<MemberLocation[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedMember, setSelectedMember] = useState<MemberLocation | null>(null);
   const [viewMode, setViewMode] = useState<'map' | 'list'>('map');
+
+  // 教學和無障礙模式狀態
+  const [showTutorial, setShowTutorial] = useState(false);
+  const [accessibilityMode, setAccessibilityMode] = useState(false);
+
+  // 🆕 快速分享成功提示
+  const [showShareSuccess, setShowShareSuccess] = useState(false);
 
   // 集合點相關狀態
   const [meetupPoint, setMeetupPoint] = useState<{
@@ -44,15 +54,42 @@ export default function GroupMapPage() {
     longitude: number;
   } | null>(null);
 
-  // 獲取或創建 device ID
+  // 獲取或創建 device ID 和 name
   useEffect(() => {
     const storedDeviceId = localStorage.getItem('device_id');
+    const storedDeviceName = localStorage.getItem('device_name');
+    
     if (storedDeviceId) {
       setDeviceId(storedDeviceId);
     } else {
       const newDeviceId = `device-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
       localStorage.setItem('device_id', newDeviceId);
       setDeviceId(newDeviceId);
+    }
+
+    if (storedDeviceName) {
+      setDeviceName(storedDeviceName);
+    } else {
+      const newDeviceName = `User-${Math.random().toString(36).substr(2, 5)}`;
+      localStorage.setItem('device_name', newDeviceName);
+      setDeviceName(newDeviceName);
+    }
+  }, []);
+
+  // 檢查是否首次訪問（顯示教學）
+  useEffect(() => {
+    const hasSeenTutorial = localStorage.getItem('map_tutorial_seen');
+    if (!hasSeenTutorial) {
+      setShowTutorial(true);
+    }
+  }, []);
+
+  // 載入無障礙模式設定
+  useEffect(() => {
+    const savedMode = localStorage.getItem('accessibility_mode');
+    if (savedMode === 'true') {
+      setAccessibilityMode(true);
+      document.documentElement.classList.add('accessibility-mode');
     }
   }, []);
 
@@ -75,7 +112,6 @@ export default function GroupMapPage() {
 
       setGroupName(data.name);
       
-      // 載入集合點（如果有的話）
       if (data.meetup_latitude && data.meetup_longitude) {
         setMeetupPoint({
           latitude: data.meetup_latitude,
@@ -213,7 +249,6 @@ export default function GroupMapPage() {
     setViewMode('map');
   };
 
-  // 🆕 返回集合點功能
   const handleReturnToMeetup = () => {
     if (meetupPoint && mapViewRef.current) {
       mapViewRef.current.flyToLocation(meetupPoint.latitude, meetupPoint.longitude, 15);
@@ -275,9 +310,38 @@ export default function GroupMapPage() {
     setShowMeetupDialog(true);
   };
 
-  // 計算預估時間（簡單估算：距離(km) / 平均速度(50km/h) * 60 = 分鐘）
+  const handleTutorialComplete = () => {
+    setShowTutorial(false);
+    localStorage.setItem('map_tutorial_seen', 'true');
+  };
+
+  const handleTutorialSkip = () => {
+    setShowTutorial(false);
+    localStorage.setItem('map_tutorial_seen', 'true');
+  };
+
+  const toggleAccessibilityMode = () => {
+    const newMode = !accessibilityMode;
+    setAccessibilityMode(newMode);
+    localStorage.setItem('accessibility_mode', String(newMode));
+    
+    if (newMode) {
+      document.documentElement.classList.add('accessibility-mode', 'large-font');
+    } else {
+      document.documentElement.classList.remove('accessibility-mode', 'large-font');
+    }
+  };
+
+  // 🆕 快速分享成功處理
+  const handleShareSuccess = () => {
+    setShowShareSuccess(true);
+    setTimeout(() => {
+      setShowShareSuccess(false);
+    }, 3000);
+  };
+
   const calculateEstimatedTime = (distanceKm: number): string => {
-    const avgSpeedKmh = 50; // 假設平均速度 50 km/h
+    const avgSpeedKmh = 50;
     const timeMinutes = (distanceKm / avgSpeedKmh) * 60;
     
     if (timeMinutes < 1) return '< 1 min';
@@ -301,6 +365,24 @@ export default function GroupMapPage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
+      {/* 教學覆蓋層 */}
+      {showTutorial && (
+        <TutorialOverlay
+          onComplete={handleTutorialComplete}
+          onSkip={handleTutorialSkip}
+        />
+      )}
+
+      {/* 🆕 全局分享成功提示 */}
+      {showShareSuccess && (
+        <div className="fixed top-20 left-1/2 transform -translate-x-1/2 z-50 animate-slide-down">
+          <div className="bg-green-500 text-white px-6 py-3 rounded-lg shadow-lg flex items-center gap-2">
+            <span className="text-xl">✅</span>
+            <span className="font-semibold">Status shared to chat!</span>
+          </div>
+        </div>
+      )}
+
       {/* 頂部導航 */}
       <header className="bg-white shadow-sm sticky top-0 z-10">
         <div className="max-w-7xl mx-auto px-4 py-4">
@@ -309,6 +391,7 @@ export default function GroupMapPage() {
               <button
                 onClick={() => router.push(`/groups/${groupId}`)}
                 className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                aria-label="返回群組"
               >
                 <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
@@ -321,6 +404,30 @@ export default function GroupMapPage() {
             </div>
 
             <div className="flex gap-2">
+              {/* 教學按鈕 */}
+              <button
+                onClick={() => setShowTutorial(true)}
+                className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                aria-label="重新觀看教學"
+                title="Tutorial"
+              >
+                <span className="text-2xl">🎓</span>
+              </button>
+
+              {/* 無障礙模式按鈕 */}
+              <button
+                onClick={toggleAccessibilityMode}
+                className={`p-2 rounded-lg transition-colors ${
+                  accessibilityMode
+                    ? 'bg-blue-100 text-blue-600'
+                    : 'hover:bg-gray-100'
+                }`}
+                aria-label="切換無障礙模式"
+                title="Accessibility Mode"
+              >
+                <span className="text-2xl">{accessibilityMode ? '👁️' : '👁️‍🗨️'}</span>
+              </button>
+
               <button
                 onClick={() => setViewMode('map')}
                 className={`px-4 py-2 rounded-lg transition-colors ${
@@ -353,6 +460,16 @@ export default function GroupMapPage() {
               groupId={groupId}
               deviceId={deviceId}
               onLocationUpdate={handleLocationUpdate}
+            />
+
+            {/* 🆕 快速分享按鈕 */}
+            <QuickShareButtons
+              groupId={groupId}
+              deviceId={deviceId}
+              deviceName={deviceName}
+              currentLocation={currentLocation || undefined}
+              meetupPoint={meetupPoint || undefined}
+              onShareSuccess={handleShareSuccess}
             />
 
             {/* 集合點控制 */}
@@ -392,7 +509,6 @@ export default function GroupMapPage() {
                     )}
                   </div>
                   
-                  {/* 🆕 返回集合點按鈕（紫色） */}
                   <button
                     onClick={handleReturnToMeetup}
                     className="w-full mb-2 bg-purple-500 hover:bg-purple-600 text-white py-2 px-4 rounded-lg transition-colors font-semibold"
@@ -400,7 +516,6 @@ export default function GroupMapPage() {
                     📍 Return to Meet Up Point
                   </button>
                   
-                  {/* 導航按鈕（藍色） */}
                   {currentLocation && (
                     <button
                       onClick={() => {
@@ -555,6 +670,23 @@ export default function GroupMapPage() {
           </div>
         </div>
       )}
+
+      <style jsx>{`
+        @keyframes slide-down {
+          from {
+            opacity: 0;
+            transform: translate(-50%, -100%);
+          }
+          to {
+            opacity: 1;
+            transform: translate(-50%, 0);
+          }
+        }
+
+        .animate-slide-down {
+          animation: slide-down 0.3s ease-out;
+        }
+      `}</style>
     </div>
   );
 }

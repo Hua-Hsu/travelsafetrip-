@@ -24,3 +24,118 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+/* ================================
+   Week 5: 無障礙模式樣式
+   ================================ */
+
+/* 大字體模式 */
+.large-font {
+  font-size: 18px !important;
+}
+
+.large-font h1 {
+  font-size: 2rem !important;
+}
+
+.large-font h2 {
+  font-size: 1.75rem !important;
+}
+
+.large-font h3 {
+  font-size: 1.5rem !important;
+}
+
+.large-font p,
+.large-font span,
+.large-font div {
+  font-size: 1.125rem !important;
+  line-height: 1.75 !important;
+}
+
+.large-font button {
+  font-size: 1.125rem !important;
+  padding: 0.875rem 1.25rem !important;
+  min-height: 48px !important;
+}
+
+.large-font input {
+  font-size: 1.125rem !important;
+  padding: 0.875rem !important;
+  min-height: 48px !important;
+}
+
+/* 高對比度模式 */
+.accessibility-mode {
+  --color-text: #000000;
+  --color-bg: #FFFFFF;
+  --color-primary: #0066CC;
+  --color-border: #333333;
+}
+
+.accessibility-mode body {
+  background-color: var(--color-bg) !important;
+  color: var(--color-text) !important;
+}
+
+.accessibility-mode .bg-white {
+  background-color: #FFFFFF !important;
+  border: 2px solid var(--color-border) !important;
+}
+
+.accessibility-mode .bg-gray-50,
+.accessibility-mode .bg-gray-100 {
+  background-color: #F5F5F5 !important;
+  border: 1px solid var(--color-border) !important;
+}
+
+.accessibility-mode .text-gray-600,
+.accessibility-mode .text-gray-700,
+.accessibility-mode .text-gray-900 {
+  color: var(--color-text) !important;
+}
+
+.accessibility-mode .bg-blue-500,
+.accessibility-mode .bg-blue-600 {
+  background-color: var(--color-primary) !important;
+  color: #FFFFFF !important;
+  border: 2px solid #000000 !important;
+}
+
+.accessibility-mode button {
+  border: 2px solid var(--color-border) !important;
+  font-weight: 600 !important;
+}
+
+.accessibility-mode button:hover {
+  box-shadow: 0 0 0 3px rgba(0, 102, 204, 0.3) !important;
+}
+
+.accessibility-mode input {
+  border: 2px solid var(--color-border) !important;
+}
+
+.accessibility-mode input:focus {
+  border-color: var(--color-primary) !important;
+  box-shadow: 0 0 0 3px rgba(0, 102, 204, 0.3) !important;
+}
+
+/* 更大的點擊區域 */
+.accessibility-mode a,
+.accessibility-mode button {
+  min-width: 44px !important;
+  min-height: 44px !important;
+}
+
+/* 更明顯的焦點指示 */
+.accessibility-mode *:focus {
+  outline: 3px solid var(--color-primary) !important;
+  outline-offset: 2px !important;
+}
+
+/* 移除動畫（減少暈眩） */
+.accessibility-mode * {
+  transition: none !important;
+  animation: none !important;
+}
+
