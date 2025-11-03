@@ -1,11 +1,11 @@
 // ================================
-// Week 4: 地圖顯示組件 + Meet Up Point
+// Week 4-5: 地圖顯示組件 + Meet Up Point + Fly To Location
 // components/MapView.tsx
 // ================================
 
 'use client';
 
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, useImperativeHandle, forwardRef } from 'react';
 import mapboxgl from 'mapbox-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
 import { MemberLocation, calculateBounds } from '@/lib/locationUtils';
@@ -18,18 +18,37 @@ interface MapViewProps {
   onMapLongPress?: (latitude: number, longitude: number) => void;
 }
 
-export default function MapView({ 
+// 🆕 定義可以從外部調用的方法
+export interface MapViewRef {
+  flyToLocation: (latitude: number, longitude: number, zoom?: number) => void;
+}
+
+const MapView = forwardRef<MapViewRef, MapViewProps>(({ 
   members, 
   currentLocation, 
   meetupPoint,
   onMemberClick,
   onMapLongPress 
-}: MapViewProps) {
+}, ref) => {
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<mapboxgl.Map | null>(null);
   const markers = useRef<Map<string, mapboxgl.Marker>>(new Map());
   const meetupMarker = useRef<mapboxgl.Marker | null>(null);
   const [mapLoaded, setMapLoaded] = useState(false);
+
+  // 🆕 暴露方法給父組件
+  useImperativeHandle(ref, () => ({
+    flyToLocation: (latitude: number, longitude: number, zoom: number = 15) => {
+      if (map.current) {
+        map.current.flyTo({
+          center: [longitude, latitude],
+          zoom: zoom,
+          duration: 1500, // 1.5 秒的飛行動畫
+          essential: true
+        });
+      }
+    }
+  }));
 
   // 初始化地圖
   useEffect(() => {
@@ -350,4 +369,9 @@ export default function MapView({
       </div>
     </div>
   );
-}
+});
+
+MapView.displayName = 'MapView';
+
+export default MapView;
+

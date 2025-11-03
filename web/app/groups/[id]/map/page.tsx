@@ -1,11 +1,11 @@
 // ================================
-// Week 4: 群組地圖頁面 + Meet Up Point (優化版)
+// Week 4-5: 群組地圖頁面 + Meet Up Point (優化版)
 // app/groups/[id]/map/page.tsx
 // ================================
 
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import MapView from '@/components/MapView';
@@ -21,6 +21,7 @@ export default function GroupMapPage() {
   const params = useParams();
   const router = useRouter();
   const groupId = params.id as string;
+  const mapViewRef = useRef<any>(null);
 
   const [deviceId, setDeviceId] = useState<string>('');
   const [groupName, setGroupName] = useState<string>('');
@@ -212,6 +213,13 @@ export default function GroupMapPage() {
     setViewMode('map');
   };
 
+  // 🆕 返回集合點功能
+  const handleReturnToMeetup = () => {
+    if (meetupPoint && mapViewRef.current) {
+      mapViewRef.current.flyToLocation(meetupPoint.latitude, meetupPoint.longitude, 15);
+    }
+  };
+
   const handleSetMeetupPoint = async (latitude: number, longitude: number) => {
     try {
       const { error } = await supabase
@@ -384,7 +392,15 @@ export default function GroupMapPage() {
                     )}
                   </div>
                   
-                  {/* 導航按鈕 */}
+                  {/* 🆕 返回集合點按鈕（紫色） */}
+                  <button
+                    onClick={handleReturnToMeetup}
+                    className="w-full mb-2 bg-purple-500 hover:bg-purple-600 text-white py-2 px-4 rounded-lg transition-colors font-semibold"
+                  >
+                    📍 Return to Meet Up Point
+                  </button>
+                  
+                  {/* 導航按鈕（藍色） */}
                   {currentLocation && (
                     <button
                       onClick={() => {
@@ -490,6 +506,7 @@ export default function GroupMapPage() {
             {viewMode === 'map' ? (
               <div className="bg-white rounded-lg shadow overflow-hidden" style={{ height: '600px' }}>
                 <MapView
+                  ref={mapViewRef}
                   members={members}
                   currentLocation={currentLocation || undefined}
                   meetupPoint={meetupPoint ?? undefined}
@@ -541,3 +558,4 @@ export default function GroupMapPage() {
     </div>
   );
 }
+
