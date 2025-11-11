@@ -1,5 +1,5 @@
 // ================================
-// Week 6 Task 1: 群組地圖頁面 - 加入隱私設定
+// Week 6 Task 1+2+3: 群組地圖頁面 - 完整版
 // app/groups/[id]/map/page.tsx
 // ================================
 
@@ -13,7 +13,9 @@ import LocationTracker from '@/components/LocationTracker';
 import MemberList from '@/components/MemberList';
 import TutorialOverlay from '@/components/TutorialOverlay';
 import QuickShareButtons from '@/components/QuickShareButtons';
-import PrivacySettings from '@/components/PrivacySettings'; // 🆕 新增
+import PrivacySettings from '@/components/PrivacySettings';
+import ETASettings from '@/components/ETASettings';
+import { useOnlineStatus } from '@/hooks/useOnlineStatus'; // 🆕 Task 3
 import {
   MemberLocation,
   LocationData,
@@ -39,7 +41,7 @@ export default function GroupMapPage() {
   const [showTutorial, setShowTutorial] = useState(false);
   const [accessibilityMode, setAccessibilityMode] = useState(false);
 
-  // 🆕 隱私設定狀態
+  // 隱私設定狀態
   const [showPrivacySettings, setShowPrivacySettings] = useState(false);
   const [isSharingLocation, setIsSharingLocation] = useState(true);
   const [previewMode, setPreviewMode] = useState(false);
@@ -59,6 +61,13 @@ export default function GroupMapPage() {
     latitude: number;
     longitude: number;
   } | null>(null);
+
+  // 🆕 Task 3: 追蹤在線狀態
+  useOnlineStatus({
+    groupId,
+    deviceId,
+    isActive: !previewMode && isSharingLocation
+  });
 
   // 獲取或創建 device ID 和 name
   useEffect(() => {
@@ -82,7 +91,7 @@ export default function GroupMapPage() {
     }
   }, []);
 
-  // 🆕 載入隱私設定
+  // 載入隱私設定
   useEffect(() => {
     if (!groupId || !deviceId) return;
 
@@ -107,7 +116,7 @@ export default function GroupMapPage() {
 
     loadPrivacySettings();
 
-    // 🆕 訂閱隱私設定變更
+    // 訂閱隱私設定變更
     const channel = supabase
       .channel(`privacy-${groupId}-${deviceId}`)
       .on(
@@ -188,12 +197,12 @@ export default function GroupMapPage() {
     if (!groupId || !deviceId) return;
 
     const loadMembers = async () => {
-      // 🆕 只顯示正在分享位置的成員
+      // 只顯示正在分享位置的成員
       const { data, error } = await supabase
         .from('group_members')
         .select('*')
         .eq('group_id', groupId)
-        .eq('is_sharing_location', true) // 🆕 過濾條件
+        .eq('is_sharing_location', true)
         .not('latitude', 'is', null)
         .not('longitude', 'is', null);
 
@@ -390,7 +399,6 @@ export default function GroupMapPage() {
     }
   };
 
-  // 快速分享成功處理
   const handleShareSuccess = () => {
     setShowShareSuccess(true);
     setTimeout(() => {
@@ -431,7 +439,7 @@ export default function GroupMapPage() {
         />
       )}
 
-      {/* 🆕 隱私設定對話框 */}
+      {/* 隱私設定對話框 */}
       <PrivacySettings
         groupId={groupId}
         deviceId={deviceId}
@@ -449,7 +457,7 @@ export default function GroupMapPage() {
         </div>
       )}
 
-      {/* 🆕 預覽模式提示橫幅 */}
+      {/* 預覽模式提示橫幅 */}
       {previewMode && (
         <div className="bg-yellow-500 text-white px-4 py-2 text-center font-semibold">
           👁️ Preview Mode Active - You are not sharing your location
@@ -477,7 +485,7 @@ export default function GroupMapPage() {
             </div>
 
             <div className="flex gap-2">
-              {/* 🆕 隱私設定按鈕 */}
+              {/* 隱私設定按鈕 */}
               <button
                 onClick={() => setShowPrivacySettings(true)}
                 className={`p-2 rounded-lg transition-colors ${
@@ -547,7 +555,7 @@ export default function GroupMapPage() {
       <main className="max-w-7xl mx-auto px-4 py-6">
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <div className="lg:col-span-1 space-y-6">
-            {/* 🆕 預覽模式時顯示提示 */}
+            {/* 預覽模式時顯示提示 */}
             {previewMode && (
               <div className="bg-yellow-50 border-2 border-yellow-300 rounded-lg p-4">
                 <div className="flex items-start gap-3">
@@ -568,7 +576,7 @@ export default function GroupMapPage() {
               </div>
             )}
 
-            {/* 🆕 只有在分享模式下才顯示 LocationTracker */}
+            {/* 只有在分享模式下才顯示 LocationTracker */}
             {!previewMode && (
               <LocationTracker
                 groupId={groupId}
@@ -577,7 +585,7 @@ export default function GroupMapPage() {
               />
             )}
 
-            {/* 快速分享按鈕 - 🆕 預覽模式下禁用 */}
+            {/* 快速分享按鈕 - 預覽模式下禁用 */}
             {!previewMode && (
               <QuickShareButtons
                 groupId={groupId}
@@ -586,6 +594,27 @@ export default function GroupMapPage() {
                 currentLocation={currentLocation || undefined}
                 meetupPoint={meetupPoint || undefined}
                 onShareSuccess={handleShareSuccess}
+              />
+            )}
+
+            {/* Task 2: ETA 設定 */}
+            {!previewMode && meetupPoint && (
+              <ETASettings
+                groupId={groupId}
+                deviceId={deviceId}
+                deviceName={deviceName}
+                meetupPoint={meetupPoint}
+                currentLocation={currentLocation || undefined}
+                distanceToMeetup={
+                  currentLocation && meetupPoint
+                    ? calculateDistance(
+                        currentLocation.latitude,
+                        currentLocation.longitude,
+                        meetupPoint.latitude,
+                        meetupPoint.longitude
+                      )
+                    : undefined
+                }
               />
             )}
 
@@ -811,3 +840,4 @@ export default function GroupMapPage() {
     </div>
   );
 }
+
