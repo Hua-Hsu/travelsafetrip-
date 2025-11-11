@@ -1,5 +1,5 @@
 // ================================
-// Week 5: 群組地圖頁面 - 完整版（Task 1-3）
+// Week 6 Task 1: 群組地圖頁面 - 加入隱私設定
 // app/groups/[id]/map/page.tsx
 // ================================
 
@@ -13,6 +13,7 @@ import LocationTracker from '@/components/LocationTracker';
 import MemberList from '@/components/MemberList';
 import TutorialOverlay from '@/components/TutorialOverlay';
 import QuickShareButtons from '@/components/QuickShareButtons';
+import PrivacySettings from '@/components/PrivacySettings'; // 🆕 新增
 import {
   MemberLocation,
   LocationData,
@@ -38,7 +39,12 @@ export default function GroupMapPage() {
   const [showTutorial, setShowTutorial] = useState(false);
   const [accessibilityMode, setAccessibilityMode] = useState(false);
 
-  // 🆕 快速分享成功提示
+  // 🆕 隱私設定狀態
+  const [showPrivacySettings, setShowPrivacySettings] = useState(false);
+  const [isSharingLocation, setIsSharingLocation] = useState(true);
+  const [previewMode, setPreviewMode] = useState(false);
+
+  // 快速分享成功提示
   const [showShareSuccess, setShowShareSuccess] = useState(false);
 
   // 集合點相關狀態
@@ -75,6 +81,56 @@ export default function GroupMapPage() {
       setDeviceName(newDeviceName);
     }
   }, []);
+
+  // 🆕 載入隱私設定
+  useEffect(() => {
+    if (!groupId || !deviceId) return;
+
+    const loadPrivacySettings = async () => {
+      const { data, error } = await supabase
+        .from('group_members')
+        .select('is_sharing_location, preview_mode')
+        .eq('group_id', groupId)
+        .eq('device_id', deviceId)
+        .single();
+
+      if (error) {
+        console.error('Failed to load privacy settings:', error);
+        return;
+      }
+
+      if (data) {
+        setIsSharingLocation(data.is_sharing_location ?? true);
+        setPreviewMode(data.preview_mode ?? false);
+      }
+    };
+
+    loadPrivacySettings();
+
+    // 🆕 訂閱隱私設定變更
+    const channel = supabase
+      .channel(`privacy-${groupId}-${deviceId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'group_members',
+          filter: `group_id=eq.${groupId}`
+        },
+        (payload: any) => {
+          if (payload.new.device_id === deviceId) {
+            setIsSharingLocation(payload.new.is_sharing_location ?? true);
+            setPreviewMode(payload.new.preview_mode ?? false);
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [groupId, deviceId]);
 
   // 檢查是否首次訪問（顯示教學）
   useEffect(() => {
@@ -132,10 +188,12 @@ export default function GroupMapPage() {
     if (!groupId || !deviceId) return;
 
     const loadMembers = async () => {
+      // 🆕 只顯示正在分享位置的成員
       const { data, error } = await supabase
         .from('group_members')
         .select('*')
         .eq('group_id', groupId)
+        .eq('is_sharing_location', true) // 🆕 過濾條件
         .not('latitude', 'is', null)
         .not('longitude', 'is', null);
 
@@ -332,7 +390,7 @@ export default function GroupMapPage() {
     }
   };
 
-  // 🆕 快速分享成功處理
+  // 快速分享成功處理
   const handleShareSuccess = () => {
     setShowShareSuccess(true);
     setTimeout(() => {
@@ -373,13 +431,28 @@ export default function GroupMapPage() {
         />
       )}
 
-      {/* 🆕 全局分享成功提示 */}
+      {/* 🆕 隱私設定對話框 */}
+      <PrivacySettings
+        groupId={groupId}
+        deviceId={deviceId}
+        isOpen={showPrivacySettings}
+        onClose={() => setShowPrivacySettings(false)}
+      />
+
+      {/* 全局分享成功提示 */}
       {showShareSuccess && (
         <div className="fixed top-20 left-1/2 transform -translate-x-1/2 z-50 animate-slide-down">
           <div className="bg-green-500 text-white px-6 py-3 rounded-lg shadow-lg flex items-center gap-2">
             <span className="text-xl">✅</span>
             <span className="font-semibold">Status shared to chat!</span>
           </div>
+        </div>
+      )}
+
+      {/* 🆕 預覽模式提示橫幅 */}
+      {previewMode && (
+        <div className="bg-yellow-500 text-white px-4 py-2 text-center font-semibold">
+          👁️ Preview Mode Active - You are not sharing your location
         </div>
       )}
 
@@ -404,6 +477,24 @@ export default function GroupMapPage() {
             </div>
 
             <div className="flex gap-2">
+              {/* 🆕 隱私設定按鈕 */}
+              <button
+                onClick={() => setShowPrivacySettings(true)}
+                className={`p-2 rounded-lg transition-colors ${
+                  previewMode
+                    ? 'bg-yellow-100 text-yellow-600'
+                    : isSharingLocation
+                    ? 'bg-green-100 text-green-600'
+                    : 'bg-red-100 text-red-600'
+                }`}
+                aria-label="隱私設定"
+                title="Privacy Settings"
+              >
+                <span className="text-2xl">
+                  {previewMode ? '👁️' : isSharingLocation ? '🟢' : '🔴'}
+                </span>
+              </button>
+
               {/* 教學按鈕 */}
               <button
                 onClick={() => setShowTutorial(true)}
@@ -456,21 +547,47 @@ export default function GroupMapPage() {
       <main className="max-w-7xl mx-auto px-4 py-6">
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <div className="lg:col-span-1 space-y-6">
-            <LocationTracker
-              groupId={groupId}
-              deviceId={deviceId}
-              onLocationUpdate={handleLocationUpdate}
-            />
+            {/* 🆕 預覽模式時顯示提示 */}
+            {previewMode && (
+              <div className="bg-yellow-50 border-2 border-yellow-300 rounded-lg p-4">
+                <div className="flex items-start gap-3">
+                  <span className="text-3xl">👁️</span>
+                  <div>
+                    <h3 className="font-bold text-yellow-900 mb-1">Preview Mode</h3>
+                    <p className="text-sm text-yellow-800 mb-2">
+                      You can view the map, but your location is not being shared with others.
+                    </p>
+                    <button
+                      onClick={() => setShowPrivacySettings(true)}
+                      className="text-sm font-semibold text-yellow-700 hover:text-yellow-900 underline"
+                    >
+                      Change Settings
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
 
-            {/* 🆕 快速分享按鈕 */}
-            <QuickShareButtons
-              groupId={groupId}
-              deviceId={deviceId}
-              deviceName={deviceName}
-              currentLocation={currentLocation || undefined}
-              meetupPoint={meetupPoint || undefined}
-              onShareSuccess={handleShareSuccess}
-            />
+            {/* 🆕 只有在分享模式下才顯示 LocationTracker */}
+            {!previewMode && (
+              <LocationTracker
+                groupId={groupId}
+                deviceId={deviceId}
+                onLocationUpdate={handleLocationUpdate}
+              />
+            )}
+
+            {/* 快速分享按鈕 - 🆕 預覽模式下禁用 */}
+            {!previewMode && (
+              <QuickShareButtons
+                groupId={groupId}
+                deviceId={deviceId}
+                deviceName={deviceName}
+                currentLocation={currentLocation || undefined}
+                meetupPoint={meetupPoint || undefined}
+                onShareSuccess={handleShareSuccess}
+              />
+            )}
 
             {/* 集合點控制 */}
             <div className="bg-white rounded-lg shadow p-4">
@@ -485,7 +602,7 @@ export default function GroupMapPage() {
                     <p className="text-xs text-red-600 mb-2">
                       {meetupPoint.latitude.toFixed(6)}, {meetupPoint.longitude.toFixed(6)}
                     </p>
-                    {currentLocation && (
+                    {currentLocation && !previewMode && (
                       <>
                         <p className="text-xs text-red-600">
                           Distance: {calculateDistance(
@@ -516,7 +633,7 @@ export default function GroupMapPage() {
                     📍 Return to Meet Up Point
                   </button>
                   
-                  {currentLocation && (
+                  {currentLocation && !previewMode && (
                     <button
                       onClick={() => {
                         const url = `https://www.google.com/maps/dir/?api=1&origin=${currentLocation.latitude},${currentLocation.longitude}&destination=${meetupPoint.latitude},${meetupPoint.longitude}`;
@@ -541,22 +658,24 @@ export default function GroupMapPage() {
                     Right-click on map (desktop) or long-press (mobile) to set meet up point
                   </p>
                   
-                  <button
-                    onClick={() => {
-                      if (currentLocation) {
-                        setTempMeetupLocation({
-                          latitude: currentLocation.latitude,
-                          longitude: currentLocation.longitude
-                        });
-                        setShowMeetupDialog(true);
-                      } else {
-                        alert('Please start tracking first to get your location');
-                      }
-                    }}
-                    className="w-full mb-3 bg-green-500 hover:bg-green-600 text-white py-2 px-4 rounded-lg transition-colors font-semibold"
-                  >
-                    Set Meetup at My Location
-                  </button>
+                  {!previewMode && (
+                    <button
+                      onClick={() => {
+                        if (currentLocation) {
+                          setTempMeetupLocation({
+                            latitude: currentLocation.latitude,
+                            longitude: currentLocation.longitude
+                          });
+                          setShowMeetupDialog(true);
+                        } else {
+                          alert('Please start tracking first to get your location');
+                        }
+                      }}
+                      className="w-full mb-3 bg-green-500 hover:bg-green-600 text-white py-2 px-4 rounded-lg transition-colors font-semibold"
+                    >
+                      Set Meetup at My Location
+                    </button>
+                  )}
                   
                   <div className="p-3 bg-gray-50 rounded-lg">
                     <p className="text-xs text-gray-500">
@@ -567,7 +686,7 @@ export default function GroupMapPage() {
               )}
             </div>
 
-            {currentLocation && (
+            {currentLocation && !previewMode && (
               <div className="bg-white rounded-lg shadow p-4">
                 <h3 className="font-semibold mb-2 text-gray-900">Your Location</h3>
                 <div className="text-sm text-gray-600 space-y-1">
@@ -593,7 +712,7 @@ export default function GroupMapPage() {
                     ✕
                   </button>
                 </div>
-                {selectedMember.distance && (
+                {selectedMember.distance && currentLocation && !previewMode && (
                   <p className="text-sm text-blue-700 mb-2">
                     Distance to you: {selectedMember.distance.toFixed(2)} km
                   </p>
@@ -603,16 +722,18 @@ export default function GroupMapPage() {
                     Distance to meetup: {(selectedMember as any).meetupDistance.toFixed(2)} km
                   </p>
                 )}
-                <button
-                  onClick={() => {
-                    const url = `https://www.google.com/maps/dir/?api=1&origin=${currentLocation?.latitude},${currentLocation?.longitude}&destination=${selectedMember.latitude},${selectedMember.longitude}`;
-                    window.open(url, '_blank');
-                  }}
-                  disabled={!currentLocation}
-                  className="w-full bg-blue-500 hover:bg-blue-600 disabled:bg-gray-300 text-white py-2 px-4 rounded-lg transition-colors"
-                >
-                  📍 View Route in Google Maps
-                </button>
+                {!previewMode && (
+                  <button
+                    onClick={() => {
+                      const url = `https://www.google.com/maps/dir/?api=1&origin=${currentLocation?.latitude},${currentLocation?.longitude}&destination=${selectedMember.latitude},${selectedMember.longitude}`;
+                      window.open(url, '_blank');
+                    }}
+                    disabled={!currentLocation}
+                    className="w-full bg-blue-500 hover:bg-blue-600 disabled:bg-gray-300 text-white py-2 px-4 rounded-lg transition-colors"
+                  >
+                    📍 View Route in Google Maps
+                  </button>
+                )}
               </div>
             )}
           </div>
@@ -623,7 +744,7 @@ export default function GroupMapPage() {
                 <MapView
                   ref={mapViewRef}
                   members={members}
-                  currentLocation={currentLocation || undefined}
+                  currentLocation={!previewMode ? currentLocation || undefined : undefined}
                   meetupPoint={meetupPoint ?? undefined}
                   onMemberClick={handleMemberClick}
                   onMapLongPress={handleMapLongPress}
@@ -690,4 +811,3 @@ export default function GroupMapPage() {
     </div>
   );
 }
-
