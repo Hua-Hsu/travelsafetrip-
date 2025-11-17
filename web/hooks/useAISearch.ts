@@ -14,10 +14,11 @@ export interface SearchState {
 }
 
 export function useAISearch(
-  mapboxToken: string,
   userLocation: [number, number],
   groupSize: number
 ) {
+  // 直接從環境變數讀取
+  const mapboxToken = process.env.NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN || '';
   const [searchState, setSearchState] = useState<SearchState>({
     isLoading: false,
     results: [],
@@ -111,3 +112,4 @@ export function useAISearch(
     clearSearch
   };
 }
+

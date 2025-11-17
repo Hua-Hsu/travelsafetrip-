@@ -73,7 +73,6 @@ export default function GroupMapPage() {
   });
 
   // 🆕 Week 7: AI 搜尋
-  const mapboxToken = process.env.NEXT_PUBLIC_MAPBOX_TOKEN || '';
   const {
     isLoading: isSearching,
     results: searchResults,
@@ -83,7 +82,6 @@ export default function GroupMapPage() {
     performSearch,
     clearSearch
   } = useAISearch(
-    mapboxToken,
     currentLocation ? [currentLocation.longitude, currentLocation.latitude] : [-122.4194, 37.7749],
     members.length || 1
   );
