@@ -1,5 +1,5 @@
 // ================================
-// Week 4-5: 地圖顯示組件 + Meet Up Point + Fly To Location
+// Week 4-5-6-7: 地圖顯示組件 - 完整整合版
 // components/MapView.tsx
 // ================================
 
@@ -9,16 +9,18 @@ import React, { useEffect, useRef, useState, useImperativeHandle, forwardRef } f
 import mapboxgl from 'mapbox-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
 import { MemberLocation, calculateBounds } from '@/lib/locationUtils';
+import { MapboxPlace } from '@/lib/mapboxSearch'; // 🆕 Week 7
 
 interface MapViewProps {
   members: MemberLocation[];
   currentLocation?: { latitude: number; longitude: number };
   meetupPoint?: { latitude: number; longitude: number };
+  searchResults?: MapboxPlace[]; // 🆕 Week 7
   onMemberClick?: (member: MemberLocation) => void;
   onMapLongPress?: (latitude: number, longitude: number) => void;
 }
 
-// 🆕 定義可以從外部調用的方法
+// 定義可以從外部調用的方法
 export interface MapViewRef {
   flyToLocation: (latitude: number, longitude: number, zoom?: number) => void;
 }
@@ -27,6 +29,7 @@ const MapView = forwardRef<MapViewRef, MapViewProps>(({
   members, 
   currentLocation, 
   meetupPoint,
+  searchResults = [], // 🆕 Week 7
   onMemberClick,
   onMapLongPress 
 }, ref) => {
@@ -34,9 +37,10 @@ const MapView = forwardRef<MapViewRef, MapViewProps>(({
   const map = useRef<mapboxgl.Map | null>(null);
   const markers = useRef<Map<string, mapboxgl.Marker>>(new Map());
   const meetupMarker = useRef<mapboxgl.Marker | null>(null);
+  const searchMarkersRef = useRef<mapboxgl.Marker[]>([]); // 🆕 Week 7
   const [mapLoaded, setMapLoaded] = useState(false);
 
-  // 🆕 暴露方法給父組件
+  // 暴露方法給父組件
   useImperativeHandle(ref, () => ({
     flyToLocation: (latitude: number, longitude: number, zoom: number = 15) => {
       if (map.current) {
@@ -148,6 +152,7 @@ const MapView = forwardRef<MapViewRef, MapViewProps>(({
       if (meetupMarker.current) {
         meetupMarker.current.remove();
       }
+      searchMarkersRef.current.forEach(marker => marker.remove()); // 🆕 Week 7
       map.current?.remove();
       map.current = null;
     };
@@ -313,8 +318,8 @@ const MapView = forwardRef<MapViewRef, MapViewProps>(({
       }
     });
 
-    // 調整地圖視野以包含所有標記
-    if (members.length > 0 || currentLocation || meetupPoint) {
+    // 🆕 調整地圖視野（當沒有搜尋結果時）
+    if (searchResults.length === 0 && (members.length > 0 || currentLocation || meetupPoint)) {
       const allLocations = [
         ...members.map(m => ({ latitude: m.latitude, longitude: m.longitude })),
         ...(currentLocation ? [currentLocation] : []),
@@ -335,7 +340,103 @@ const MapView = forwardRef<MapViewRef, MapViewProps>(({
         );
       }
     }
-  }, [members, mapLoaded, onMemberClick, meetupPoint]);
+  }, [members, mapLoaded, onMemberClick, meetupPoint, searchResults.length]);
+
+  // 🆕 Week 7: 更新搜尋結果標記
+  useEffect(() => {
+    if (!map.current || !mapLoaded) return;
+
+    // 清除舊的搜尋標記
+    searchMarkersRef.current.forEach(marker => marker.remove());
+    searchMarkersRef.current = [];
+
+    // 如果沒有搜尋結果，直接返回
+    if (searchResults.length === 0) return;
+
+    // 顯示新的搜尋結果標記
+    searchResults.forEach((place, index) => {
+      const el = document.createElement('div');
+      el.innerHTML = `
+        <div style="
+          background: linear-gradient(135deg, #8B5CF6 0%, #6D28D9 100%);
+          color: white;
+          width: 36px;
+          height: 36px;
+          border-radius: 50%;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          font-weight: bold;
+          font-size: 16px;
+          border: 3px solid white;
+          box-shadow: 0 4px 12px rgba(139, 92, 246, 0.5);
+          cursor: pointer;
+          transition: transform 0.2s;
+        ">
+          ${index + 1}
+        </div>
+      `;
+
+      // Hover 效果
+      el.addEventListener('mouseenter', () => {
+        el.style.transform = 'scale(1.2)';
+      });
+      el.addEventListener('mouseleave', () => {
+        el.style.transform = 'scale(1)';
+      });
+
+      const marker = new mapboxgl.Marker(el)
+        .setLngLat(place.coordinates)
+        .setPopup(
+          new mapboxgl.Popup({ offset: 25, maxWidth: '300px' }).setHTML(`
+            <div style="padding: 12px;">
+              <div style="font-weight: bold; font-size: 16px; margin-bottom: 6px; color: #111;">${place.name}</div>
+              <div style="font-size: 13px; color: #666; margin-bottom: 8px;">${place.address}</div>
+              <div style="font-size: 12px; display: flex; flex-wrap: gap: 8px; align-items: center; color: #333;">
+                ${place.rating ? `<span>⭐ ${place.rating.toFixed(1)}</span>` : ''}
+                <span>📍 ${place.distance.toFixed(1)} mi</span>
+                <span style="
+                  background: ${place.safetyScore >= 8 ? '#10B981' : place.safetyScore >= 7 ? '#F59E0B' : '#EF4444'};
+                  color: white;
+                  padding: 2px 8px;
+                  border-radius: 12px;
+                  font-weight: bold;
+                ">
+                  🎯 ${place.safetyScore.toFixed(1)}/10
+                </span>
+              </div>
+              ${place.isOpen !== undefined ? `
+                <div style="margin-top: 6px; font-size: 12px; color: ${place.isOpen ? '#10B981' : '#EF4444'}; font-weight: 500;">
+                  ${place.isOpen ? '✅ Open now' : '🔴 Closed'}
+                </div>
+              ` : ''}
+            </div>
+          `)
+        )
+        .addTo(map.current!);
+
+      searchMarkersRef.current.push(marker);
+    });
+
+    // 調整地圖視角以包含所有搜尋結果
+    if (searchResults.length > 0 && currentLocation) {
+      const bounds = new mapboxgl.LngLatBounds();
+      
+      // 加入當前位置
+      bounds.extend([currentLocation.longitude, currentLocation.latitude]);
+      
+      // 加入所有搜尋結果
+      searchResults.forEach(place => {
+        bounds.extend(place.coordinates);
+      });
+
+      map.current.fitBounds(bounds, {
+        padding: { top: 80, bottom: 80, left: 80, right: 80 },
+        maxZoom: 14,
+        duration: 1500
+      });
+    }
+  }, [searchResults, currentLocation, mapLoaded]);
 
   return (
     <div className="relative w-full h-full">
@@ -361,9 +462,28 @@ const MapView = forwardRef<MapViewRef, MapViewProps>(({
           <span className="text-sm">Other Members</span>
         </div>
         {meetupPoint && (
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 mb-2">
             <div className="text-lg">📍</div>
             <span className="text-sm">Meet Up Point</span>
+          </div>
+        )}
+        {/* 🆕 Week 7: 搜尋結果圖例 */}
+        {searchResults.length > 0 && (
+          <div className="flex items-center gap-2">
+            <div style={{
+              width: '20px',
+              height: '20px',
+              background: 'linear-gradient(135deg, #8B5CF6 0%, #6D28D9 100%)',
+              borderRadius: '50%',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontSize: '10px',
+              color: 'white',
+              fontWeight: 'bold',
+              border: '2px solid white'
+            }}>1</div>
+            <span className="text-sm">Search Results</span>
           </div>
         )}
       </div>

@@ -1,5 +1,5 @@
 // ================================
-// Week 6 Task 1+2+3: 群組地圖頁面 - 完整版
+// Week 5+6+7: 群組地圖頁面 - 完整整合版
 // app/groups/[id]/map/page.tsx
 // ================================
 
@@ -15,7 +15,10 @@ import TutorialOverlay from '@/components/TutorialOverlay';
 import QuickShareButtons from '@/components/QuickShareButtons';
 import PrivacySettings from '@/components/PrivacySettings';
 import ETASettings from '@/components/ETASettings';
-import { useOnlineStatus } from '@/hooks/useOnlineStatus'; // 🆕 Task 3
+import AISearchBar from '@/components/AISearchBar'; // 🆕 Week 7
+import RecommendationCard from '@/components/RecommendationCard'; // 🆕 Week 7
+import { useOnlineStatus } from '@/hooks/useOnlineStatus';
+import { useAISearch } from '@/hooks/useAISearch'; // 🆕 Week 7
 import {
   MemberLocation,
   LocationData,
@@ -62,12 +65,28 @@ export default function GroupMapPage() {
     longitude: number;
   } | null>(null);
 
-  // 🆕 Task 3: 追蹤在線狀態
+  // Week 6 Task 3: 追蹤在線狀態
   useOnlineStatus({
     groupId,
     deviceId,
     isActive: !previewMode && isSharingLocation
   });
+
+  // 🆕 Week 7: AI 搜尋
+  const mapboxToken = process.env.NEXT_PUBLIC_MAPBOX_TOKEN || '';
+  const {
+    isLoading: isSearching,
+    results: searchResults,
+    query: searchQuery,
+    error: searchError,
+    searchTitle,
+    performSearch,
+    clearSearch
+  } = useAISearch(
+    mapboxToken,
+    currentLocation ? [currentLocation.longitude, currentLocation.latitude] : [-122.4194, 37.7749],
+    members.length || 1
+  );
 
   // 獲取或創建 device ID 和 name
   useEffect(() => {
@@ -418,6 +437,30 @@ export default function GroupMapPage() {
     return `~${hours}h ${mins}m`;
   };
 
+  // 🆕 Week 7: 處理搜尋結果導航
+  const handleNavigateToPlace = (coordinates: [number, number]) => {
+    const [lng, lat] = coordinates;
+    if (currentLocation && !previewMode) {
+      window.open(
+        `https://www.google.com/maps/dir/?api=1&origin=${currentLocation.latitude},${currentLocation.longitude}&destination=${lat},${lng}`,
+        '_blank'
+      );
+    } else {
+      window.open(
+        `https://www.google.com/maps/search/?api=1&query=${lat},${lng}`,
+        '_blank'
+      );
+    }
+  };
+
+  // 🆕 Week 7: 處理地圖飛行到搜尋結果
+  const handleFlyToPlace = (coordinates: [number, number]) => {
+    if (mapViewRef.current) {
+      const [lng, lat] = coordinates;
+      mapViewRef.current.flyToLocation(lat, lng, 16);
+    }
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
@@ -555,8 +598,67 @@ export default function GroupMapPage() {
       <main className="max-w-7xl mx-auto px-4 py-6">
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <div className="lg:col-span-1 space-y-6">
-            {/* 預覽模式時顯示提示 */}
-            {previewMode && (
+            {/* 🆕 Week 7: AI 搜尋區塊 */}
+            <div className="bg-white rounded-lg shadow p-4">
+              <div className="flex items-center gap-2 mb-3">
+                <span className="text-2xl">✨</span>
+                <h3 className="text-lg font-semibold text-gray-900">AI Search Assistant</h3>
+              </div>
+              
+              <AISearchBar
+                onSearch={performSearch}
+                onClear={() => {
+                  clearSearch();
+                  setViewMode('map');
+                }}
+                isLoading={isSearching}
+                hasResults={searchResults.length > 0}
+              />
+
+              {/* 搜尋標題 */}
+              {searchTitle && (
+                <div className="mt-3 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                  <p className="text-sm text-blue-700 flex items-center gap-2">
+                    <span>✨</span>
+                    {searchTitle}
+                  </p>
+                </div>
+              )}
+
+              {/* 錯誤訊息 */}
+              {searchError && (
+                <div className="mt-3 p-3 bg-red-50 border border-red-200 rounded-lg">
+                  <p className="text-sm text-red-700">{searchError}</p>
+                </div>
+              )}
+            </div>
+
+            {/* 🆕 Week 7: 搜尋結果列表 */}
+            {searchResults.length > 0 && (
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <h3 className="font-bold text-gray-900">
+                    {searchResults.length} Recommendations
+                  </h3>
+                  <span className="text-sm text-gray-600">
+                    Sorted by safety score
+                  </span>
+                </div>
+
+                {searchResults.map((place, index) => (
+                  <RecommendationCard
+                    key={place.id}
+                    place={place}
+                    rank={index + 1}
+                    onNavigate={handleNavigateToPlace}
+                    onFlyTo={handleFlyToPlace}
+                  />
+                ))}
+              </div>
+            )}
+
+            {/* 預覽模式時顯示提示（只在沒有搜尋結果時顯示） */}
+            {previewMode && searchResults.length === 0 && (
               <div className="bg-yellow-50 border-2 border-yellow-300 rounded-lg p-4">
                 <div className="flex items-start gap-3">
                   <span className="text-3xl">👁️</span>
@@ -576,194 +678,199 @@ export default function GroupMapPage() {
               </div>
             )}
 
-            {/* 只有在分享模式下才顯示 LocationTracker */}
-            {!previewMode && (
-              <LocationTracker
-                groupId={groupId}
-                deviceId={deviceId}
-                onLocationUpdate={handleLocationUpdate}
-              />
-            )}
+            {/* 只在沒有搜尋結果時顯示原有的側邊欄內容 */}
+            {searchResults.length === 0 && (
+              <>
+                {/* 只有在分享模式下才顯示 LocationTracker */}
+                {!previewMode && (
+                  <LocationTracker
+                    groupId={groupId}
+                    deviceId={deviceId}
+                    onLocationUpdate={handleLocationUpdate}
+                  />
+                )}
 
-            {/* 快速分享按鈕 - 預覽模式下禁用 */}
-            {!previewMode && (
-              <QuickShareButtons
-                groupId={groupId}
-                deviceId={deviceId}
-                deviceName={deviceName}
-                currentLocation={currentLocation || undefined}
-                meetupPoint={meetupPoint || undefined}
-                onShareSuccess={handleShareSuccess}
-              />
-            )}
+                {/* 快速分享按鈕 - 預覽模式下禁用 */}
+                {!previewMode && (
+                  <QuickShareButtons
+                    groupId={groupId}
+                    deviceId={deviceId}
+                    deviceName={deviceName}
+                    currentLocation={currentLocation || undefined}
+                    meetupPoint={meetupPoint || undefined}
+                    onShareSuccess={handleShareSuccess}
+                  />
+                )}
 
-            {/* Task 2: ETA 設定 */}
-            {!previewMode && meetupPoint && (
-              <ETASettings
-                groupId={groupId}
-                deviceId={deviceId}
-                deviceName={deviceName}
-                meetupPoint={meetupPoint}
-                currentLocation={currentLocation || undefined}
-                distanceToMeetup={
-                  currentLocation && meetupPoint
-                    ? calculateDistance(
-                        currentLocation.latitude,
-                        currentLocation.longitude,
-                        meetupPoint.latitude,
-                        meetupPoint.longitude
-                      )
-                    : undefined
-                }
-              />
-            )}
-
-            {/* 集合點控制 */}
-            <div className="bg-white rounded-lg shadow p-4">
-              <h3 className="text-lg font-semibold mb-3 text-gray-900">Meet Up Point</h3>
-              
-              {meetupPoint ? (
-                <div>
-                  <div className="mb-3 p-3 bg-red-50 border border-red-200 rounded-lg">
-                    <p className="text-sm text-red-700 mb-1 font-semibold">
-                      📍 Meet up point is set
-                    </p>
-                    <p className="text-xs text-red-600 mb-2">
-                      {meetupPoint.latitude.toFixed(6)}, {meetupPoint.longitude.toFixed(6)}
-                    </p>
-                    {currentLocation && !previewMode && (
-                      <>
-                        <p className="text-xs text-red-600">
-                          Distance: {calculateDistance(
+                {/* Task 2: ETA 設定 */}
+                {!previewMode && meetupPoint && (
+                  <ETASettings
+                    groupId={groupId}
+                    deviceId={deviceId}
+                    deviceName={deviceName}
+                    meetupPoint={meetupPoint}
+                    currentLocation={currentLocation || undefined}
+                    distanceToMeetup={
+                      currentLocation && meetupPoint
+                        ? calculateDistance(
                             currentLocation.latitude,
                             currentLocation.longitude,
                             meetupPoint.latitude,
                             meetupPoint.longitude
-                          ).toFixed(2)} km
+                          )
+                        : undefined
+                    }
+                  />
+                )}
+
+                {/* 集合點控制 */}
+                <div className="bg-white rounded-lg shadow p-4">
+                  <h3 className="text-lg font-semibold mb-3 text-gray-900">Meet Up Point</h3>
+                  
+                  {meetupPoint ? (
+                    <div>
+                      <div className="mb-3 p-3 bg-red-50 border border-red-200 rounded-lg">
+                        <p className="text-sm text-red-700 mb-1 font-semibold">
+                          📍 Meet up point is set
                         </p>
-                        <p className="text-xs text-red-600">
-                          Estimated time: {calculateEstimatedTime(
-                            calculateDistance(
-                              currentLocation.latitude,
-                              currentLocation.longitude,
-                              meetupPoint.latitude,
-                              meetupPoint.longitude
-                            )
-                          )}
+                        <p className="text-xs text-red-600 mb-2">
+                          {meetupPoint.latitude.toFixed(6)}, {meetupPoint.longitude.toFixed(6)}
                         </p>
-                      </>
+                        {currentLocation && !previewMode && (
+                          <>
+                            <p className="text-xs text-red-600">
+                              Distance: {calculateDistance(
+                                currentLocation.latitude,
+                                currentLocation.longitude,
+                                meetupPoint.latitude,
+                                meetupPoint.longitude
+                              ).toFixed(2)} km
+                            </p>
+                            <p className="text-xs text-red-600">
+                              Estimated time: {calculateEstimatedTime(
+                                calculateDistance(
+                                  currentLocation.latitude,
+                                  currentLocation.longitude,
+                                  meetupPoint.latitude,
+                                  meetupPoint.longitude
+                                )
+                              )}
+                            </p>
+                          </>
+                        )}
+                      </div>
+                      
+                      <button
+                        onClick={handleReturnToMeetup}
+                        className="w-full mb-2 bg-purple-500 hover:bg-purple-600 text-white py-2 px-4 rounded-lg transition-colors font-semibold"
+                      >
+                        📍 Return to Meet Up Point
+                      </button>
+                      
+                      {currentLocation && !previewMode && (
+                        <button
+                          onClick={() => {
+                            const url = `https://www.google.com/maps/dir/?api=1&origin=${currentLocation.latitude},${currentLocation.longitude}&destination=${meetupPoint.latitude},${meetupPoint.longitude}`;
+                            window.open(url, '_blank');
+                          }}
+                          className="w-full mb-2 bg-blue-500 hover:bg-blue-600 text-white py-2 px-4 rounded-lg transition-colors font-semibold"
+                        >
+                          🧭 Navigate to Meet Up Point
+                        </button>
+                      )}
+                      
+                      <button
+                        onClick={handleClearMeetupPoint}
+                        className="w-full bg-red-500 hover:bg-red-600 text-white py-2 px-4 rounded-lg transition-colors"
+                      >
+                        Clear Meet Up Point
+                      </button>
+                    </div>
+                  ) : (
+                    <div>
+                      <p className="text-sm text-gray-600 mb-3">
+                        Right-click on map (desktop) or long-press (mobile) to set meet up point
+                      </p>
+                      
+                      {!previewMode && (
+                        <button
+                          onClick={() => {
+                            if (currentLocation) {
+                              setTempMeetupLocation({
+                                latitude: currentLocation.latitude,
+                                longitude: currentLocation.longitude
+                              });
+                              setShowMeetupDialog(true);
+                            } else {
+                              alert('Please start tracking first to get your location');
+                            }
+                          }}
+                          className="w-full mb-3 bg-green-500 hover:bg-green-600 text-white py-2 px-4 rounded-lg transition-colors font-semibold"
+                        >
+                          Set Meetup at My Location
+                        </button>
+                      )}
+                      
+                      <div className="p-3 bg-gray-50 rounded-lg">
+                        <p className="text-xs text-gray-500">
+                          💡 All members can see the meet up point and their distance to it
+                        </p>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {currentLocation && !previewMode && (
+                  <div className="bg-white rounded-lg shadow p-4">
+                    <h3 className="font-semibold mb-2 text-gray-900">Your Location</h3>
+                    <div className="text-sm text-gray-600 space-y-1">
+                      <p>Latitude: {currentLocation.latitude.toFixed(6)}</p>
+                      <p>Longitude: {currentLocation.longitude.toFixed(6)}</p>
+                      {currentLocation.accuracy && (
+                        <p>Accuracy: ±{currentLocation.accuracy.toFixed(0)}m</p>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {selectedMember && (
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                    <div className="flex items-start justify-between mb-2">
+                      <h3 className="font-semibold text-blue-900">
+                        {selectedMember.device_name}
+                      </h3>
+                      <button
+                        onClick={() => setSelectedMember(null)}
+                        className="text-blue-600 hover:text-blue-800"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                    {selectedMember.distance && currentLocation && !previewMode && (
+                      <p className="text-sm text-blue-700 mb-2">
+                        Distance to you: {selectedMember.distance.toFixed(2)} km
+                      </p>
+                    )}
+                    {(selectedMember as any).meetupDistance && meetupPoint && (
+                      <p className="text-sm text-red-700 mb-2">
+                        Distance to meetup: {(selectedMember as any).meetupDistance.toFixed(2)} km
+                      </p>
+                    )}
+                    {!previewMode && (
+                      <button
+                        onClick={() => {
+                          const url = `https://www.google.com/maps/dir/?api=1&origin=${currentLocation?.latitude},${currentLocation?.longitude}&destination=${selectedMember.latitude},${selectedMember.longitude}`;
+                          window.open(url, '_blank');
+                        }}
+                        disabled={!currentLocation}
+                        className="w-full bg-blue-500 hover:bg-blue-600 disabled:bg-gray-300 text-white py-2 px-4 rounded-lg transition-colors"
+                      >
+                        📍 View Route in Google Maps
+                      </button>
                     )}
                   </div>
-                  
-                  <button
-                    onClick={handleReturnToMeetup}
-                    className="w-full mb-2 bg-purple-500 hover:bg-purple-600 text-white py-2 px-4 rounded-lg transition-colors font-semibold"
-                  >
-                    📍 Return to Meet Up Point
-                  </button>
-                  
-                  {currentLocation && !previewMode && (
-                    <button
-                      onClick={() => {
-                        const url = `https://www.google.com/maps/dir/?api=1&origin=${currentLocation.latitude},${currentLocation.longitude}&destination=${meetupPoint.latitude},${meetupPoint.longitude}`;
-                        window.open(url, '_blank');
-                      }}
-                      className="w-full mb-2 bg-blue-500 hover:bg-blue-600 text-white py-2 px-4 rounded-lg transition-colors font-semibold"
-                    >
-                      🧭 Navigate to Meet Up Point
-                    </button>
-                  )}
-                  
-                  <button
-                    onClick={handleClearMeetupPoint}
-                    className="w-full bg-red-500 hover:bg-red-600 text-white py-2 px-4 rounded-lg transition-colors"
-                  >
-                    Clear Meet Up Point
-                  </button>
-                </div>
-              ) : (
-                <div>
-                  <p className="text-sm text-gray-600 mb-3">
-                    Right-click on map (desktop) or long-press (mobile) to set meet up point
-                  </p>
-                  
-                  {!previewMode && (
-                    <button
-                      onClick={() => {
-                        if (currentLocation) {
-                          setTempMeetupLocation({
-                            latitude: currentLocation.latitude,
-                            longitude: currentLocation.longitude
-                          });
-                          setShowMeetupDialog(true);
-                        } else {
-                          alert('Please start tracking first to get your location');
-                        }
-                      }}
-                      className="w-full mb-3 bg-green-500 hover:bg-green-600 text-white py-2 px-4 rounded-lg transition-colors font-semibold"
-                    >
-                      Set Meetup at My Location
-                    </button>
-                  )}
-                  
-                  <div className="p-3 bg-gray-50 rounded-lg">
-                    <p className="text-xs text-gray-500">
-                      💡 All members can see the meet up point and their distance to it
-                    </p>
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {currentLocation && !previewMode && (
-              <div className="bg-white rounded-lg shadow p-4">
-                <h3 className="font-semibold mb-2 text-gray-900">Your Location</h3>
-                <div className="text-sm text-gray-600 space-y-1">
-                  <p>Latitude: {currentLocation.latitude.toFixed(6)}</p>
-                  <p>Longitude: {currentLocation.longitude.toFixed(6)}</p>
-                  {currentLocation.accuracy && (
-                    <p>Accuracy: ±{currentLocation.accuracy.toFixed(0)}m</p>
-                  )}
-                </div>
-              </div>
-            )}
-
-            {selectedMember && (
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                <div className="flex items-start justify-between mb-2">
-                  <h3 className="font-semibold text-blue-900">
-                    {selectedMember.device_name}
-                  </h3>
-                  <button
-                    onClick={() => setSelectedMember(null)}
-                    className="text-blue-600 hover:text-blue-800"
-                  >
-                    ✕
-                  </button>
-                </div>
-                {selectedMember.distance && currentLocation && !previewMode && (
-                  <p className="text-sm text-blue-700 mb-2">
-                    Distance to you: {selectedMember.distance.toFixed(2)} km
-                  </p>
                 )}
-                {(selectedMember as any).meetupDistance && meetupPoint && (
-                  <p className="text-sm text-red-700 mb-2">
-                    Distance to meetup: {(selectedMember as any).meetupDistance.toFixed(2)} km
-                  </p>
-                )}
-                {!previewMode && (
-                  <button
-                    onClick={() => {
-                      const url = `https://www.google.com/maps/dir/?api=1&origin=${currentLocation?.latitude},${currentLocation?.longitude}&destination=${selectedMember.latitude},${selectedMember.longitude}`;
-                      window.open(url, '_blank');
-                    }}
-                    disabled={!currentLocation}
-                    className="w-full bg-blue-500 hover:bg-blue-600 disabled:bg-gray-300 text-white py-2 px-4 rounded-lg transition-colors"
-                  >
-                    📍 View Route in Google Maps
-                  </button>
-                )}
-              </div>
+              </>
             )}
           </div>
 
@@ -775,6 +882,7 @@ export default function GroupMapPage() {
                   members={members}
                   currentLocation={!previewMode ? currentLocation || undefined : undefined}
                   meetupPoint={meetupPoint ?? undefined}
+                  searchResults={searchResults} // 🆕 Week 7: 傳遞搜尋結果給地圖
                   onMemberClick={handleMemberClick}
                   onMapLongPress={handleMapLongPress}
                 />
