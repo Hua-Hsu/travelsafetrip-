@@ -1,10 +1,5 @@
 // lib/gemini.ts
-// Gemini AI 整合 - 用於理解使用者搜尋需求
-
-import { GoogleGenerativeAI } from '@google/generative-ai';
-
-// 初始化 Gemini AI
-const genAI = new GoogleGenerativeAI(process.env.NEXT_PUBLIC_GEMINI_API_KEY || '');
+// 簡化版 - 不使用 Gemini AI，直接用關鍵字匹配
 
 // 搜尋查詢結構
 export interface SearchQuery {
@@ -24,127 +19,97 @@ export interface GroupContext {
 }
 
 /**
- * 使用 Gemini AI 理解使用者的搜尋需求
+ * 簡單的關鍵字解析器（不使用 AI）
  */
 export async function parseSearchIntent(
   userInput: string,
   context: GroupContext
 ): Promise<SearchQuery> {
-  try {
-    const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
-
-    const prompt = `You are a travel assistant helping a group find nearby places.
-
-User Input: "${userInput}"
-
-Context:
-- Group size: ${context.groupSize} people
-- Current time: ${context.currentTime.toLocaleString()}
-- Location: ${context.currentLocation[1].toFixed(4)}, ${context.currentLocation[0].toFixed(4)}
-
-Please analyze the user's intent and return ONLY a JSON object (no markdown, no explanation) with this structure:
-{
-  "category": "restaurant" | "cafe" | "gas_station" | "convenience" | "tourist_spot" | "hospital" | "rest_area",
-  "keywords": ["keyword1", "keyword2"],
-  "maxDistance": number (3-6 miles based on urgency),
-  "preferences": ["open-now", "group-friendly", "highly-rated"],
-  "urgency": "low" | "medium" | "high"
-}
-
-Category guidelines:
-- "restaurant": mentions food, meal, lunch, dinner, eat, hungry
-- "cafe": mentions coffee, tea, snack, break, relax
-- "gas_station": mentions gas, fuel, refuel
-- "convenience": mentions store, shop, buy, supplies
-- "tourist_spot": mentions sightseeing, attraction, landmark, visit
-- "hospital": mentions medical, emergency, doctor, pharmacy
-- "rest_area": mentions rest, bathroom, restroom, break
-
-Preferences guidelines:
-- Always include "open-now" unless user says "later"
-- Include "group-friendly" for groups > 4 people
-- Include "highly-rated" by default
-
-Urgency guidelines:
-- "high": emergency words (urgent, now, quickly, emergency)
-- "medium": meal times, gas, restroom
-- "low": sightseeing, relaxing
-
-Distance guidelines:
-- high urgency: 10 miles max
-- medium urgency: 30 miles max
-- low urgency: 50 miles max`;
-
-    const result = await model.generateContent(prompt);
-    const response = await result.response;
-    const text = response.text().trim();
-
-    // 移除可能的 markdown 標記
-    let jsonText = text;
-    if (text.startsWith('```json')) {
-      jsonText = text.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
-    } else if (text.startsWith('```')) {
-      jsonText = text.replace(/```\n?/g, '').trim();
-    }
-
-    const parsed = JSON.parse(jsonText);
-
-    // 驗證並返回
-    return {
-      category: parsed.category || 'restaurant',
-      keywords: Array.isArray(parsed.keywords) ? parsed.keywords : [],
-      maxDistance: parsed.maxDistance || 5,
-      preferences: Array.isArray(parsed.preferences) ? parsed.preferences : ['open-now'],
-      urgency: parsed.urgency || 'medium'
-    };
-  } catch (error) {
-    console.error('Gemini AI parsing error:', error);
-    
-    // 備用：簡單關鍵字匹配
-    return fallbackParser(userInput, context);
-  }
-}
-
-/**
- * 備用解析器（當 AI 失敗時）
- */
-function fallbackParser(userInput: string, context: GroupContext): SearchQuery {
+  console.log('🔍 Parsing search (Simple mode):', userInput);
+  
   const input = userInput.toLowerCase();
   
   // 類別匹配
   let category: SearchQuery['category'] = 'restaurant';
-  if (input.includes('coffee') || input.includes('cafe')) {
+  let urgency: SearchQuery['urgency'] = 'medium';
+  let keywords: string[] = [];
+  
+  // 餐廳相關
+  if (input.includes('restaurant') || input.includes('food') || input.includes('eat') || 
+      input.includes('lunch') || input.includes('dinner') || input.includes('breakfast')) {
+    category = 'restaurant';
+    keywords = ['restaurant', 'food'];
+    urgency = 'medium';
+  }
+  // 咖啡廳
+  else if (input.includes('coffee') || input.includes('cafe') || input.includes('tea')) {
     category = 'cafe';
-  } else if (input.includes('gas') || input.includes('fuel')) {
+    keywords = ['cafe', 'coffee'];
+    urgency = 'low';
+  }
+  // 加油站
+  else if (input.includes('gas') || input.includes('fuel') || input.includes('petrol')) {
     category = 'gas_station';
-  } else if (input.includes('store') || input.includes('shop')) {
+    keywords = ['gas', 'fuel'];
+    urgency = input.includes('urgent') || input.includes('need') ? 'high' : 'medium';
+  }
+  // 便利商店
+  else if (input.includes('store') || input.includes('shop') || input.includes('convenience')) {
     category = 'convenience';
-  } else if (input.includes('sight') || input.includes('attraction')) {
+    keywords = ['store', 'shop'];
+    urgency = 'medium';
+  }
+  // 景點
+  else if (input.includes('tourist') || input.includes('attraction') || input.includes('sight') || 
+           input.includes('visit') || input.includes('landmark')) {
     category = 'tourist_spot';
-  } else if (input.includes('hospital') || input.includes('medical')) {
+    keywords = ['tourist', 'attraction'];
+    urgency = 'low';
+  }
+  // 醫院
+  else if (input.includes('hospital') || input.includes('medical') || input.includes('doctor') || 
+           input.includes('clinic')) {
     category = 'hospital';
-  } else if (input.includes('rest') || input.includes('bathroom')) {
+    keywords = ['hospital', 'medical'];
+    urgency = 'high';
+  }
+  // 休息區
+  else if (input.includes('rest') || input.includes('bathroom') || input.includes('restroom')) {
     category = 'rest_area';
+    keywords = ['rest', 'area'];
+    urgency = input.includes('urgent') || input.includes('need') ? 'high' : 'medium';
   }
 
-  // 緊急度判斷
-  let urgency: SearchQuery['urgency'] = 'medium';
-  if (input.includes('urgent') || input.includes('emergency') || input.includes('now')) {
+  // 檢查緊急程度關鍵字
+  if (input.includes('urgent') || input.includes('emergency') || input.includes('now') || 
+      input.includes('quickly') || input.includes('asap')) {
     urgency = 'high';
-  } else if (input.includes('later') || input.includes('explore')) {
+  } else if (input.includes('later') || input.includes('explore') || input.includes('leisure')) {
     urgency = 'low';
   }
 
   // 距離設定
   const maxDistance = urgency === 'high' ? 10 : urgency === 'medium' ? 30 : 50;
 
-  return {
+  // 偏好設定
+  const preferences: string[] = ['open-now'];
+  if (context.groupSize > 4) {
+    preferences.push('group-friendly');
+  } else {
+    preferences.push('highly-rated');
+  }
+
+  const result: SearchQuery = {
     category,
-    keywords: input.split(' ').filter(word => word.length > 3),
+    keywords,
     maxDistance,
-    preferences: ['open-now', context.groupSize > 4 ? 'group-friendly' : 'highly-rated'],
+    preferences,
     urgency
   };
+
+  console.log('✅ Parsed query (Simple mode):', result);
+  
+  return result;
 }
 
 /**
@@ -163,5 +128,4 @@ export async function generateSearchTitle(query: SearchQuery): Promise<string> {
 
   return `Finding ${categoryNames[query.category]} within ${query.maxDistance} miles...`;
 }
-
 
