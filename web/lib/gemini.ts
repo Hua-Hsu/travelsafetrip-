@@ -71,9 +71,9 @@ Urgency guidelines:
 - "low": sightseeing, relaxing
 
 Distance guidelines:
-- high urgency: 3 miles max
-- medium urgency: 5 miles max
-- low urgency: 6 miles max`;
+- high urgency: 10 miles max
+- medium urgency: 30 miles max
+- low urgency: 50 miles max`;
 
     const result = await model.generateContent(prompt);
     const response = await result.response;
@@ -136,7 +136,7 @@ function fallbackParser(userInput: string, context: GroupContext): SearchQuery {
   }
 
   // 距離設定
-  const maxDistance = urgency === 'high' ? 3 : urgency === 'medium' ? 5 : 6;
+  const maxDistance = urgency === 'high' ? 10 : urgency === 'medium' ? 30 : 50;
 
   return {
     category,
