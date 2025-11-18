@@ -31,7 +31,7 @@ export async function parseSearchIntent(
   context: GroupContext
 ): Promise<SearchQuery> {
   try {
-    const model = genAI.getGenerativeModel({ model: 'gemini-pro' });
+    const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
 
     const prompt = `You are a travel assistant helping a group find nearby places.
 
@@ -163,4 +163,5 @@ export async function generateSearchTitle(query: SearchQuery): Promise<string> {
 
   return `Finding ${categoryNames[query.category]} within ${query.maxDistance} miles...`;
 }
+
 
