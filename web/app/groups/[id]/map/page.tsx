@@ -245,6 +245,30 @@ export default function GroupMapPage() {
     loadGroup();
   }, [groupId, router]);
 
+  // 🆕 Week 8: 處理從離線地圖管理頁面返回時飛到選定區域
+  useEffect(() => {
+    const viewAreaData = localStorage.getItem('viewOfflineArea');
+    if (viewAreaData && mapInstance) {
+      try {
+        const area = JSON.parse(viewAreaData);
+        console.log('Flying to offline area:', area);
+        
+        // 飛到區域中心
+        mapInstance.flyTo({
+          center: [area.center.lng, area.center.lat],
+          zoom: area.zoom || 13,
+          duration: 2000
+        });
+
+        // 清除標記，避免重複觸發
+        localStorage.removeItem('viewOfflineArea');
+      } catch (error) {
+        console.error('Failed to parse viewOfflineArea:', error);
+        localStorage.removeItem('viewOfflineArea');
+      }
+    }
+  }, [mapInstance]);
+
   // 載入並訂閱成員位置
   useEffect(() => {
     if (!groupId || !deviceId) return;

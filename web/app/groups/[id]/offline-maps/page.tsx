@@ -39,27 +39,34 @@ export default function OfflineMapsPage() {
   };
 
   const handleDelete = async (areaId: string) => {
-    if (!confirm('確定要刪除這個離線地圖區域嗎？')) return;
+    if (!confirm('Are you sure you want to delete this offline map area?')) return;
 
     try {
-      const cache = getMapTileCache(process.env.NEXT_PUBLIC_MAPBOX_TOKEN!);
+      const cache = getMapTileCache(process.env.NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN!);
       await cache.deleteArea(areaId);
       await loadDownloadedAreas();
     } catch (error) {
       console.error('Failed to delete area:', error);
-      alert('刪除失敗，請稍後再試');
+      alert('Delete failed, please try again later');
     }
   };
 
+  const handleViewArea = (area: DownloadedArea) => {
+    // 將區域資訊儲存到 localStorage，讓地圖頁面可以讀取
+    localStorage.setItem('viewOfflineArea', JSON.stringify(area));
+    // 導航到地圖頁面
+    router.push(`/groups/${groupId}/map`);
+  };
+
   const handleClearAll = async () => {
-    if (!confirm('確定要清除所有離線地圖資料嗎？此操作無法復原。')) return;
+    if (!confirm('Are you sure you want to clear all offline map data? This action cannot be undone.')) return;
 
     try {
       await offlineStorage.clearAllData();
       await loadDownloadedAreas();
     } catch (error) {
       console.error('Failed to clear all data:', error);
-      alert('清除失敗，請稍後再試');
+      alert('Clear failed, please try again later');
     }
   };
 
@@ -72,7 +79,7 @@ export default function OfflineMapsPage() {
 
   const formatDate = (dateString: string): string => {
     const date = new Date(dateString);
-    return date.toLocaleDateString('zh-TW', {
+    return date.toLocaleDateString('en-US', {
       year: 'numeric',
       month: 'long',
       day: 'numeric',
@@ -149,10 +156,19 @@ export default function OfflineMapsPage() {
           ) : (
             <div className="divide-y">
               {downloadedAreas.map((area) => (
-                <div key={area.id} className="p-4 hover:bg-gray-50">
-                  <div className="flex items-start justify-between">
-                    <div className="flex-1">
-                      <h3 className="font-semibold mb-1 text-black">{area.name}</h3>
+                <div 
+                  key={area.id} 
+                  className="p-4 hover:bg-gray-50 transition-colors"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div 
+                      className="flex-1 cursor-pointer"
+                      onClick={() => handleViewArea(area)}
+                    >
+                      <h3 className="font-semibold mb-1 text-black flex items-center gap-2 hover:text-blue-600">
+                        <MapPin className="w-4 h-4" />
+                        {area.name}
+                      </h3>
                       <div className="text-sm text-black space-y-1">
                         <p>
                           <span className="font-medium">Location: </span>
@@ -171,10 +187,18 @@ export default function OfflineMapsPage() {
                           {formatDate(area.downloadedAt)}
                         </p>
                       </div>
+                      <div className="mt-2 text-xs text-blue-600 flex items-center gap-1">
+                        <MapPin className="w-3 h-3" />
+                        Click to view on map
+                      </div>
                     </div>
                     <button
-                      onClick={() => handleDelete(area.id)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleDelete(area.id);
+                      }}
                       className="p-2 text-red-600 hover:bg-red-50 rounded-lg"
+                      title="Delete area"
                     >
                       <Trash2 className="w-5 h-5" />
                     </button>
