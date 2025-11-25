@@ -1,5 +1,5 @@
 // ================================
-// Week 4-5-6-7: 地圖顯示組件 - 完整整合版
+// Week 4-5-6-7-8: 地圖顯示組件 - 完整整合版
 // components/MapView.tsx
 // ================================
 
@@ -18,6 +18,7 @@ interface MapViewProps {
   searchResults?: MapboxPlace[]; // 🆕 Week 7
   onMemberClick?: (member: MemberLocation) => void;
   onMapLongPress?: (latitude: number, longitude: number) => void;
+  onMapLoad?: (map: mapboxgl.Map) => void; // 🆕 Week 8: 傳遞地圖實例給父組件
 }
 
 // 定義可以從外部調用的方法
@@ -31,7 +32,8 @@ const MapView = forwardRef<MapViewRef, MapViewProps>(({
   meetupPoint,
   searchResults = [], // 🆕 Week 7
   onMemberClick,
-  onMapLongPress 
+  onMapLongPress,
+  onMapLoad // 🆕 Week 8
 }, ref) => {
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<mapboxgl.Map | null>(null);
@@ -90,6 +92,12 @@ const MapView = forwardRef<MapViewRef, MapViewProps>(({
     // 地圖載入完成
     map.current.on('load', () => {
       setMapLoaded(true);
+      
+      // 🆕 Week 8: 當地圖載入完成，傳遞地圖實例給父組件
+      if (onMapLoad && map.current) {
+        console.log('Map loaded, calling onMapLoad callback');
+        onMapLoad(map.current);
+      }
     });
 
     // 處理集合點設定（電腦端：右鍵點擊，手機端：長按）
@@ -156,7 +164,7 @@ const MapView = forwardRef<MapViewRef, MapViewProps>(({
       map.current?.remove();
       map.current = null;
     };
-  }, []);
+  }, [onMapLoad]); // 🆕 Week 8: 加入 onMapLoad 到 dependency array
 
   // 更新集合點標記
   useEffect(() => {

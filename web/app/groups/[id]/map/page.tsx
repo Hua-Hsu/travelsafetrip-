@@ -9,6 +9,8 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
+import mapboxgl from 'mapbox-gl';
+import 'mapbox-gl/dist/mapbox-gl.css';
 import MapView from '@/components/MapView';
 import LocationTracker from '@/components/LocationTracker';
 import MemberList from '@/components/MemberList';
@@ -40,6 +42,9 @@ export default function GroupMapPage() {
   const router = useRouter();
   const groupId = params.id as string;
   const mapViewRef = useRef<any>(null);
+  
+  // 🆕 Week 8: 儲存 Mapbox 地圖實例
+  const [mapInstance, setMapInstance] = useState<mapboxgl.Map | null>(null);
 
   const [deviceId, setDeviceId] = useState<string>('');
   const [deviceName, setDeviceName] = useState<string>('');
@@ -981,6 +986,7 @@ export default function GroupMapPage() {
                   searchResults={searchResults}
                   onMemberClick={handleMemberClick}
                   onMapLongPress={handleMapLongPress}
+                  onMapLoad={(map) => setMapInstance(map)}
                 />
               </div>
             ) : (
@@ -995,9 +1001,9 @@ export default function GroupMapPage() {
       </main>
 
       {/* 🆕 Week 8: 區域選擇器 */}
-      {showAreaSelector && mapViewRef.current?.getMap?.() && (
+      {showAreaSelector && mapInstance && (
         <AreaSelector
-          map={mapViewRef.current.getMap()}
+          map={mapInstance}
           mapboxToken={process.env.NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN!}
           onDownloadStart={(area) => {
             setShowAreaSelector(false);
