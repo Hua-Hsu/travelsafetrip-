@@ -1,6 +1,7 @@
 // ================================
-// Week 5+6+7: 群組地圖頁面 - 完整整合版
+// Week 5+6+7+8: 群組地圖頁面 - 完整整合版
 // app/groups/[id]/map/page.tsx
+// 包含：原有功能 + Week 8 離線地圖
 // ================================
 
 'use client';
@@ -15,10 +16,19 @@ import TutorialOverlay from '@/components/TutorialOverlay';
 import QuickShareButtons from '@/components/QuickShareButtons';
 import PrivacySettings from '@/components/PrivacySettings';
 import ETASettings from '@/components/ETASettings';
-import AISearchBar from '@/components/AISearchBar'; // 🆕 Week 7
-import RecommendationCard from '@/components/RecommendationCard'; // 🆕 Week 7
+import AISearchBar from '@/components/AISearchBar';
+import RecommendationCard from '@/components/RecommendationCard';
 import { useOnlineStatus } from '@/hooks/useOnlineStatus';
-import { useAISearch } from '@/hooks/useAISearch'; // 🆕 Week 7
+import { useAISearch } from '@/hooks/useAISearch';
+
+// 🆕 Week 8: 離線功能組件和 Hooks
+import { ConnectionStatus } from '@/components/Ui/ConnectionStatus';
+import { AreaSelector } from '@/components/map/AreaSelector';
+import { DownloadProgress } from '@/components/map/DownloadProgress';
+import { useOfflineMap } from '@/hooks/useOfflineMap';
+import { useNetworkStatus } from '@/hooks/useNetworkStatus';
+
+import { Download, Menu, Wifi, WifiOff } from 'lucide-react';
 import {
   MemberLocation,
   LocationData,
@@ -52,6 +62,10 @@ export default function GroupMapPage() {
   // 快速分享成功提示
   const [showShareSuccess, setShowShareSuccess] = useState(false);
 
+  // 🆕 Week 8: 離線地圖 UI 狀態
+  const [showAreaSelector, setShowAreaSelector] = useState(false);
+  const [showMenu, setShowMenu] = useState(false);
+
   // 集合點相關狀態
   const [meetupPoint, setMeetupPoint] = useState<{
     latitude: number;
@@ -65,14 +79,32 @@ export default function GroupMapPage() {
     longitude: number;
   } | null>(null);
 
-  // Week 6 Task 3: 追蹤在線狀態
+  // Week 6: 追蹤在線狀態
   useOnlineStatus({
     groupId,
     deviceId,
     isActive: !previewMode && isSharingLocation
   });
 
-  // 🆕 Week 7: AI 搜尋
+  // 🆕 Week 8: 離線地圖功能
+  const {
+    isOfflineMode,
+    downloadProgress,
+    cachedLocations,
+    cachedMeetupPoint,
+    downloadArea,
+    cacheUserLocations,
+    cacheMeetupPoint
+  } = useOfflineMap({
+    groupId,
+    mapboxToken: process.env.NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN!,
+    map: mapViewRef.current?.getMap?.()
+  });
+
+  // 🆕 Week 8: 網路狀態
+  const { isOnline } = useNetworkStatus();
+
+  // Week 7: AI 搜尋
   const {
     isLoading: isSearching,
     results: searchResults,
@@ -133,7 +165,6 @@ export default function GroupMapPage() {
 
     loadPrivacySettings();
 
-    // 訂閱隱私設定變更
     const channel = supabase
       .channel(`privacy-${groupId}-${deviceId}`)
       .on(
@@ -214,7 +245,6 @@ export default function GroupMapPage() {
     if (!groupId || !deviceId) return;
 
     const loadMembers = async () => {
-      // 只顯示正在分享位置的成員
       const { data, error } = await supabase
         .from('group_members')
         .select('*')
@@ -435,7 +465,7 @@ export default function GroupMapPage() {
     return `~${hours}h ${mins}m`;
   };
 
-  // 🆕 Week 7: 處理搜尋結果導航
+  // Week 7: 處理搜尋結果導航
   const handleNavigateToPlace = (coordinates: [number, number]) => {
     const [lng, lat] = coordinates;
     if (currentLocation && !previewMode) {
@@ -451,7 +481,7 @@ export default function GroupMapPage() {
     }
   };
 
-  // 🆕 Week 7: 處理地圖飛行到搜尋結果
+  // Week 7: 處理地圖飛行到搜尋結果
   const handleFlyToPlace = (coordinates: [number, number]) => {
     if (mapViewRef.current) {
       const [lng, lat] = coordinates;
@@ -472,6 +502,9 @@ export default function GroupMapPage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
+      {/* 🆕 Week 8: 連線狀態指示器 */}
+      <ConnectionStatus />
+
       {/* 教學覆蓋層 */}
       {showTutorial && (
         <TutorialOverlay
@@ -502,6 +535,14 @@ export default function GroupMapPage() {
       {previewMode && (
         <div className="bg-yellow-500 text-white px-4 py-2 text-center font-semibold">
           👁️ Preview Mode Active - You are not sharing your location
+        </div>
+      )}
+
+      {/* 🆕 Week 8: 離線模式提示橫幅 */}
+      {isOfflineMode && (
+        <div className="bg-orange-500 text-white px-4 py-2 text-center font-semibold flex items-center justify-center gap-2">
+          <WifiOff className="w-5 h-5" />
+          <span>離線模式 - 顯示最後已知位置</span>
         </div>
       )}
 
@@ -542,6 +583,26 @@ export default function GroupMapPage() {
                 <span className="text-2xl">
                   {previewMode ? '👁️' : isSharingLocation ? '🟢' : '🔴'}
                 </span>
+              </button>
+
+              {/* 🆕 Week 8: 下載離線地圖按鈕 */}
+              {!isOfflineMode && (
+                <button
+                  onClick={() => setShowAreaSelector(true)}
+                  className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                  title="下載離線地圖"
+                >
+                  <Download className="w-6 h-6" />
+                </button>
+              )}
+
+              {/* 🆕 Week 8: 選單按鈕 */}
+              <button
+                onClick={() => setShowMenu(!showMenu)}
+                className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                title="選單"
+              >
+                <Menu className="w-6 h-6" />
               </button>
 
               {/* 教學按鈕 */}
@@ -593,10 +654,35 @@ export default function GroupMapPage() {
         </div>
       </header>
 
+      {/* 🆕 Week 8: 選單 */}
+      {showMenu && (
+        <div className="fixed top-24 right-4 bg-white rounded-lg shadow-lg p-2 w-48 z-20">
+          <button
+            onClick={() => {
+              setShowMenu(false);
+              router.push(`/groups/${groupId}/offline-maps`);
+            }}
+            className="w-full text-left px-4 py-2 hover:bg-gray-100 rounded flex items-center gap-2"
+          >
+            <Download className="w-4 h-4" />
+            管理離線地圖
+          </button>
+          <button
+            onClick={() => {
+              setShowMenu(false);
+              router.push(`/groups/${groupId}`);
+            }}
+            className="w-full text-left px-4 py-2 hover:bg-gray-100 rounded"
+          >
+            返回聊天室
+          </button>
+        </div>
+      )}
+
       <main className="max-w-7xl mx-auto px-4 py-6">
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <div className="lg:col-span-1 space-y-6">
-            {/* 🆕 Week 7: AI 搜尋區塊 */}
+            {/* Week 7: AI 搜尋區塊 */}
             <div className="bg-white rounded-lg shadow p-4">
               <div className="flex items-center gap-2 mb-3">
                 <span className="text-2xl">✨</span>
@@ -613,7 +699,6 @@ export default function GroupMapPage() {
                 hasResults={searchResults.length > 0}
               />
 
-              {/* 搜尋標題 */}
               {searchTitle && (
                 <div className="mt-3 p-3 bg-blue-50 border border-blue-200 rounded-lg">
                   <p className="text-sm text-blue-700 flex items-center gap-2">
@@ -623,7 +708,6 @@ export default function GroupMapPage() {
                 </div>
               )}
 
-              {/* 錯誤訊息 */}
               {searchError && (
                 <div className="mt-3 p-3 bg-red-50 border border-red-200 rounded-lg">
                   <p className="text-sm text-red-700">{searchError}</p>
@@ -631,7 +715,7 @@ export default function GroupMapPage() {
               )}
             </div>
 
-            {/* 🆕 Week 7: 搜尋結果列表 */}
+            {/* Week 7: 搜尋結果列表 */}
             {searchResults.length > 0 && (
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
@@ -679,7 +763,6 @@ export default function GroupMapPage() {
             {/* 只在沒有搜尋結果時顯示原有的側邊欄內容 */}
             {searchResults.length === 0 && (
               <>
-                {/* 只有在分享模式下才顯示 LocationTracker */}
                 {!previewMode && (
                   <LocationTracker
                     groupId={groupId}
@@ -688,7 +771,6 @@ export default function GroupMapPage() {
                   />
                 )}
 
-                {/* 快速分享按鈕 - 預覽模式下禁用 */}
                 {!previewMode && (
                   <QuickShareButtons
                     groupId={groupId}
@@ -700,7 +782,6 @@ export default function GroupMapPage() {
                   />
                 )}
 
-                {/* Task 2: ETA 設定 */}
                 {!previewMode && meetupPoint && (
                   <ETASettings
                     groupId={groupId}
@@ -721,7 +802,6 @@ export default function GroupMapPage() {
                   />
                 )}
 
-                {/* 集合點控制 */}
                 <div className="bg-white rounded-lg shadow p-4">
                   <h3 className="text-lg font-semibold mb-3 text-gray-900">Meet Up Point</h3>
                   
@@ -870,6 +950,24 @@ export default function GroupMapPage() {
                 )}
               </>
             )}
+
+            {/* 🆕 Week 8: 在線/離線指示器 */}
+            <div className="bg-white rounded-lg shadow p-3 flex items-center justify-between">
+              <span className="text-sm font-medium text-gray-700">Connection Status:</span>
+              <div className="flex items-center gap-2">
+                {isOnline ? (
+                  <>
+                    <Wifi className="w-4 h-4 text-green-500" />
+                    <span className="text-sm font-medium text-green-600">在線</span>
+                  </>
+                ) : (
+                  <>
+                    <WifiOff className="w-4 h-4 text-orange-500" />
+                    <span className="text-sm font-medium text-orange-600">離線</span>
+                  </>
+                )}
+              </div>
+            </div>
           </div>
 
           <div className="lg:col-span-2">
@@ -880,7 +978,7 @@ export default function GroupMapPage() {
                   members={members}
                   currentLocation={!previewMode ? currentLocation || undefined : undefined}
                   meetupPoint={meetupPoint ?? undefined}
-                  searchResults={searchResults} // 🆕 Week 7: 傳遞搜尋結果給地圖
+                  searchResults={searchResults}
                   onMemberClick={handleMemberClick}
                   onMapLongPress={handleMapLongPress}
                 />
@@ -895,6 +993,27 @@ export default function GroupMapPage() {
           </div>
         </div>
       </main>
+
+      {/* 🆕 Week 8: 區域選擇器 */}
+      {showAreaSelector && mapViewRef.current?.getMap?.() && (
+        <AreaSelector
+          map={mapViewRef.current.getMap()}
+          mapboxToken={process.env.NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN!}
+          onDownloadStart={(area) => {
+            setShowAreaSelector(false);
+            downloadArea(area);
+          }}
+          onCancel={() => setShowAreaSelector(false)}
+        />
+      )}
+
+      {/* 🆕 Week 8: 下載進度 */}
+      {downloadProgress && (
+        <DownloadProgress
+          progress={downloadProgress}
+          onClose={() => {}}
+        />
+      )}
 
       {showMeetupDialog && tempMeetupLocation && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
