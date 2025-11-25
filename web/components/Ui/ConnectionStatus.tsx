@@ -33,7 +33,7 @@ export function ConnectionStatus({ onReconnected, onReconnectFailed }: Connectio
       <div className={`
         flex items-center gap-3 px-4 py-3 rounded-lg shadow-lg
         ${!isOnline ? 'bg-red-500' : isReconnecting ? 'bg-yellow-500' : 'bg-green-500'}
-        text-white
+        text-black
       `}>
         {/* 圖示 */}
         {!isOnline ? (
@@ -47,20 +47,20 @@ export function ConnectionStatus({ onReconnected, onReconnectFailed }: Connectio
         {/* 訊息 */}
         <div className="flex flex-col">
           <span className="font-semibold">
-            {!isOnline ? '沒有網路連線' : 
-             isReconnecting ? '正在重新連接...' : 
-             '連線已恢復'}
+            {!isOnline ? 'No Network Connection' : 
+             isReconnecting ? 'Reconnecting...' : 
+             'Connection Restored'}
           </span>
           
           {isReconnecting && (
             <span className="text-sm opacity-90">
-              嘗試 {reconnectAttempts} / {maxAttempts}
+              Attempt {reconnectAttempts} / {maxAttempts}
             </span>
           )}
           
           {!isOnline && !isReconnecting && (
             <span className="text-sm opacity-90">
-              某些功能可能無法使用
+              Some features may be unavailable
             </span>
           )}
         </div>
@@ -71,7 +71,7 @@ export function ConnectionStatus({ onReconnected, onReconnectFailed }: Connectio
             onClick={manualRetry}
             className="ml-2 px-3 py-1 bg-white/20 hover:bg-white/30 rounded transition-colors"
           >
-            重試
+            Retry
           </button>
         )}
 
@@ -79,7 +79,7 @@ export function ConnectionStatus({ onReconnected, onReconnectFailed }: Connectio
         {reconnectAttempts >= maxAttempts && (
           <div className="flex items-center gap-2 ml-2">
             <AlertCircle className="w-4 h-4" />
-            <span className="text-sm">無法連接</span>
+            <span className="text-sm">Cannot Connect</span>
           </div>
         )}
       </div>

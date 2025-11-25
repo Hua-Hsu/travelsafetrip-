@@ -540,9 +540,9 @@ export default function GroupMapPage() {
 
       {/* 🆕 Week 8: 離線模式提示橫幅 */}
       {isOfflineMode && (
-        <div className="bg-orange-500 text-white px-4 py-2 text-center font-semibold flex items-center justify-center gap-2">
+        <div className="bg-orange-500 text-black px-4 py-2 text-center font-semibold flex items-center justify-center gap-2">
           <WifiOff className="w-5 h-5" />
-          <span>離線模式 - 顯示最後已知位置</span>
+          <span>Offline Mode - Showing Last Known Locations</span>
         </div>
       )}
 
@@ -590,9 +590,9 @@ export default function GroupMapPage() {
                 <button
                   onClick={() => setShowAreaSelector(true)}
                   className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-                  title="下載離線地圖"
+                  title="Download Offline Map"
                 >
-                  <Download className="w-6 h-6" />
+                  <Download className="w-6 h-6 text-black" />
                 </button>
               )}
 
@@ -600,9 +600,9 @@ export default function GroupMapPage() {
               <button
                 onClick={() => setShowMenu(!showMenu)}
                 className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-                title="選單"
+                title="Menu"
               >
-                <Menu className="w-6 h-6" />
+                <Menu className="w-6 h-6 text-black" />
               </button>
 
               {/* 教學按鈕 */}
@@ -662,19 +662,19 @@ export default function GroupMapPage() {
               setShowMenu(false);
               router.push(`/groups/${groupId}/offline-maps`);
             }}
-            className="w-full text-left px-4 py-2 hover:bg-gray-100 rounded flex items-center gap-2"
+            className="w-full text-left px-4 py-2 hover:bg-gray-100 rounded flex items-center gap-2 text-black"
           >
             <Download className="w-4 h-4" />
-            管理離線地圖
+            Manage Offline Maps
           </button>
           <button
             onClick={() => {
               setShowMenu(false);
               router.push(`/groups/${groupId}`);
             }}
-            className="w-full text-left px-4 py-2 hover:bg-gray-100 rounded"
+            className="w-full text-left px-4 py-2 hover:bg-gray-100 rounded text-black"
           >
-            返回聊天室
+            Back to Chat
           </button>
         </div>
       )}
@@ -953,17 +953,17 @@ export default function GroupMapPage() {
 
             {/* 🆕 Week 8: 在線/離線指示器 */}
             <div className="bg-white rounded-lg shadow p-3 flex items-center justify-between">
-              <span className="text-sm font-medium text-gray-700">Connection Status:</span>
+              <span className="text-sm font-medium text-black">Connection Status:</span>
               <div className="flex items-center gap-2">
                 {isOnline ? (
                   <>
                     <Wifi className="w-4 h-4 text-green-500" />
-                    <span className="text-sm font-medium text-green-600">在線</span>
+                    <span className="text-sm font-medium text-black">Online</span>
                   </>
                 ) : (
                   <>
                     <WifiOff className="w-4 h-4 text-orange-500" />
-                    <span className="text-sm font-medium text-orange-600">離線</span>
+                    <span className="text-sm font-medium text-black">Offline</span>
                   </>
                 )}
               </div>

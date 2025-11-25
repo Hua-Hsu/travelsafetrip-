@@ -1,239 +1,202 @@
-// app/groups/[id]/map/page.tsx (修改版，整合離線功能)
+// app/groups/[id]/offline-maps/page.tsx
 
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import mapboxgl from 'mapbox-gl';
-import 'mapbox-gl/dist/mapbox-gl.css';
-import { Download, Menu, Wifi, WifiOff } from 'lucide-react';
+import { MapPin, Trash2, Download, HardDrive, ChevronLeft } from 'lucide-react';
+import { getMapTileCache } from '@/lib/mapTileCache';
+import { DownloadedArea } from '@/types/offline';
+import { offlineStorage } from '@/lib/offlineStorage';
 
-// 組件導入
-import { ConnectionStatus } from '@/components/Ui/ConnectionStatus';
-import { AreaSelector } from '@/components/map/AreaSelector';
-import { DownloadProgress } from '@/components/map/DownloadProgress';
-
-// Hooks 導入
-import { useOfflineMap } from '@/hooks/useOfflineMap';
-import { useNetworkStatus } from '@/hooks/useNetworkStatus';
-
-// Mapbox token
-mapboxgl.accessToken = process.env.NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN!;
-
-export default function MapPage() {
+export default function OfflineMapsPage() {
   const params = useParams();
   const router = useRouter();
   const groupId = params.id as string;
 
-  // 地圖相關
-  const mapContainer = useRef<HTMLDivElement>(null);
-  const map = useRef<mapboxgl.Map | null>(null);
-  const [mapLoaded, setMapLoaded] = useState(false);
+  const [downloadedAreas, setDownloadedAreas] = useState<DownloadedArea[]>([]);
+  const [totalStorage, setTotalStorage] = useState<string>('0 MB');
+  const [isLoading, setIsLoading] = useState(true);
 
-  // UI 狀態
-  const [showAreaSelector, setShowAreaSelector] = useState(false);
-  const [showMenu, setShowMenu] = useState(false);
-
-  // 離線地圖功能
-  const {
-    isOfflineMode,
-    downloadProgress,
-    cachedLocations,
-    cachedMeetupPoint,
-    downloadArea,
-    cacheUserLocations,
-    cacheMeetupPoint
-  } = useOfflineMap({
-    groupId,
-    mapboxToken: process.env.NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN!,
-    map: map.current
-  });
-
-  // 網路狀態
-  const { isOnline } = useNetworkStatus();
-
-  /**
-   * 初始化地圖
-   */
   useEffect(() => {
-    if (!mapContainer.current || map.current) return;
-
-    map.current = new mapboxgl.Map({
-      container: mapContainer.current,
-      style: 'mapbox://styles/mapbox/streets-v12',
-      center: [121.5654, 25.0330], // 台北
-      zoom: 13
-    });
-
-    map.current.on('load', () => {
-      setMapLoaded(true);
-    });
-
-    return () => {
-      if (map.current) {
-        map.current.remove();
-        map.current = null;
-      }
-    };
+    loadDownloadedAreas();
   }, []);
 
-  /**
-   * 在離線模式下顯示緩存的位置
-   */
-  useEffect(() => {
-    if (!map.current || !mapLoaded || !isOfflineMode) return;
+  const loadDownloadedAreas = async () => {
+    try {
+      setIsLoading(true);
+      const areas = await offlineStorage.getDownloadedAreas();
+      setDownloadedAreas(areas);
 
-    // 清除現有的標記
-    document.querySelectorAll('.cached-marker').forEach(el => el.remove());
-
-    // 顯示緩存的成員位置
-    cachedLocations.forEach(location => {
-      const el = document.createElement('div');
-      el.className = 'cached-marker';
-      el.style.width = '30px';
-      el.style.height = '30px';
-      el.style.backgroundColor = '#f59e0b';
-      el.style.borderRadius = '50%';
-      el.style.border = '3px solid white';
-
-      new mapboxgl.Marker(el)
-        .setLngLat([location.longitude, location.latitude])
-        .setPopup(
-          new mapboxgl.Popup().setHTML(`
-            <div>
-              <strong>${location.userName}</strong>
-              <p class="text-xs text-gray-500">最後位置（離線）</p>
-            </div>
-          `)
-        )
-        .addTo(map.current!);
-    });
-
-    // 顯示緩存的集合點
-    if (cachedMeetupPoint) {
-      const el = document.createElement('div');
-      el.className = 'cached-marker';
-      el.style.width = '40px';
-      el.style.height = '40px';
-      el.style.backgroundColor = '#ef4444';
-      el.style.borderRadius = '50%';
-      el.style.border = '3px solid white';
-
-      new mapboxgl.Marker(el)
-        .setLngLat([cachedMeetupPoint.longitude, cachedMeetupPoint.latitude])
-        .setPopup(
-          new mapboxgl.Popup().setHTML(`
-            <div>
-              <strong>集合點</strong>
-              <p class="text-xs text-gray-500">${cachedMeetupPoint.name}</p>
-            </div>
-          `)
-        )
-        .addTo(map.current!);
+      // 計算總儲存空間
+      const totalBytes = await offlineStorage.getTotalStorageSize();
+      setTotalStorage(formatBytes(totalBytes));
+    } catch (error) {
+      console.error('Failed to load downloaded areas:', error);
+    } finally {
+      setIsLoading(false);
     }
-  }, [mapLoaded, isOfflineMode, cachedLocations, cachedMeetupPoint]);
+  };
+
+  const handleDelete = async (areaId: string) => {
+    if (!confirm('確定要刪除這個離線地圖區域嗎？')) return;
+
+    try {
+      const cache = getMapTileCache(process.env.NEXT_PUBLIC_MAPBOX_TOKEN!);
+      await cache.deleteArea(areaId);
+      await loadDownloadedAreas();
+    } catch (error) {
+      console.error('Failed to delete area:', error);
+      alert('刪除失敗，請稍後再試');
+    }
+  };
+
+  const handleClearAll = async () => {
+    if (!confirm('確定要清除所有離線地圖資料嗎？此操作無法復原。')) return;
+
+    try {
+      await offlineStorage.clearAllData();
+      await loadDownloadedAreas();
+    } catch (error) {
+      console.error('Failed to clear all data:', error);
+      alert('清除失敗，請稍後再試');
+    }
+  };
+
+  const formatBytes = (bytes: number): string => {
+    if (bytes < 1024) return bytes + ' B';
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(2) + ' KB';
+    if (bytes < 1024 * 1024 * 1024) return (bytes / (1024 * 1024)).toFixed(2) + ' MB';
+    return (bytes / (1024 * 1024 * 1024)).toFixed(2) + ' GB';
+  };
+
+  const formatDate = (dateString: string): string => {
+    const date = new Date(dateString);
+    return date.toLocaleDateString('zh-TW', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+  };
 
   return (
-    <div className="relative w-full h-screen">
-      {/* 連線狀態指示器 */}
-      <ConnectionStatus />
-
-      {/* 地圖容器 */}
-      <div ref={mapContainer} className="w-full h-full" />
-
-      {/* 離線模式提示 */}
-      {isOfflineMode && (
-        <div className="absolute top-20 left-4 bg-orange-500 text-white px-4 py-2 rounded-lg shadow-lg flex items-center gap-2">
-          <WifiOff className="w-5 h-5" />
-          <span className="font-semibold">離線模式</span>
+    <div className="min-h-screen bg-gray-50">
+      {/* Header */}
+      <div className="bg-white border-b">
+        <div className="max-w-4xl mx-auto px-4 py-4">
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => router.push(`/groups/${groupId}/map`)}
+              className="p-2 hover:bg-gray-100 rounded-lg"
+            >
+              <ChevronLeft className="w-5 h-5 text-black" />
+            </button>
+            <div>
+              <h1 className="text-xl font-bold text-black">Offline Map Management</h1>
+              <p className="text-sm text-black">Manage downloaded map areas</p>
+            </div>
+          </div>
         </div>
-      )}
-
-      {/* 工具列 */}
-      <div className="absolute top-4 right-4 flex flex-col gap-2">
-        {/* 下載離線地圖按鈕 */}
-        {!isOfflineMode && (
-          <button
-            onClick={() => setShowAreaSelector(true)}
-            className="bg-white p-3 rounded-lg shadow-lg hover:bg-gray-50"
-            title="下載離線地圖"
-          >
-            <Download className="w-6 h-6" />
-          </button>
-        )}
-
-        {/* 選單按鈕 */}
-        <button
-          onClick={() => setShowMenu(!showMenu)}
-          className="bg-white p-3 rounded-lg shadow-lg hover:bg-gray-50"
-          title="選單"
-        >
-          <Menu className="w-6 h-6" />
-        </button>
       </div>
 
-      {/* 選單 */}
-      {showMenu && (
-        <div className="absolute top-20 right-4 bg-white rounded-lg shadow-lg p-2 w-48">
-          <button
-            onClick={() => router.push(`/groups/${groupId}/offline-maps`)}
-            className="w-full text-left px-4 py-2 hover:bg-gray-100 rounded flex items-center gap-2"
-          >
-            <Download className="w-4 h-4" />
-            管理離線地圖
-          </button>
-          <button
-            onClick={() => router.push(`/groups/${groupId}/chat`)}
-            className="w-full text-left px-4 py-2 hover:bg-gray-100 rounded"
-          >
-            返回聊天室
-          </button>
+      {/* Content */}
+      <div className="max-w-4xl mx-auto px-4 py-6 space-y-6">
+        {/* 儲存空間資訊 */}
+        <div className="bg-white rounded-lg shadow p-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="p-3 bg-blue-100 rounded-lg">
+                <HardDrive className="w-6 h-6 text-blue-600" />
+              </div>
+              <div>
+                <p className="text-sm text-black">Storage Used</p>
+                <p className="text-2xl font-bold text-black">{totalStorage}</p>
+              </div>
+            </div>
+            {downloadedAreas.length > 0 && (
+              <button
+                onClick={handleClearAll}
+                className="px-4 py-2 text-red-600 hover:bg-red-50 rounded-lg font-semibold"
+              >
+                Clear All
+              </button>
+            )}
+          </div>
         </div>
-      )}
 
-      {/* 區域選擇器 */}
-      {showAreaSelector && map.current && (
-        <AreaSelector
-          map={map.current}
-          mapboxToken={process.env.NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN!}
-          onDownloadStart={(area) => {
-            setShowAreaSelector(false);
-            downloadArea(area);
-          }}
-          onCancel={() => setShowAreaSelector(false)}
-        />
-      )}
+        {/* 已下載的區域列表 */}
+        <div className="bg-white rounded-lg shadow">
+          <div className="p-4 border-b">
+            <h2 className="font-semibold flex items-center gap-2 text-black">
+              <Download className="w-5 h-5" />
+              Downloaded Areas
+              <span className="text-sm text-gray-500">({downloadedAreas.length})</span>
+            </h2>
+          </div>
 
-      {/* 下載進度 */}
-      {downloadProgress && (
-        <DownloadProgress
-          progress={downloadProgress}
-          onClose={() => {
-            // 只在完成或失敗時允許關閉
-            if (downloadProgress.status === 'completed' || downloadProgress.status === 'failed') {
-              // downloadProgress 會自動清除
-            }
-          }}
-        />
-      )}
+          {isLoading ? (
+            <div className="p-8 text-center text-black">
+              Loading...
+            </div>
+          ) : downloadedAreas.length === 0 ? (
+            <div className="p-8 text-center text-black">
+              <MapPin className="w-12 h-12 mx-auto mb-3 text-gray-300" />
+              <p>No offline maps downloaded yet</p>
+              <p className="text-sm mt-1">Go to map page to select an area to download</p>
+            </div>
+          ) : (
+            <div className="divide-y">
+              {downloadedAreas.map((area) => (
+                <div key={area.id} className="p-4 hover:bg-gray-50">
+                  <div className="flex items-start justify-between">
+                    <div className="flex-1">
+                      <h3 className="font-semibold mb-1 text-black">{area.name}</h3>
+                      <div className="text-sm text-black space-y-1">
+                        <p>
+                          <span className="font-medium">Location: </span>
+                          {area.center.lat.toFixed(4)}, {area.center.lng.toFixed(4)}
+                        </p>
+                        <p>
+                          <span className="font-medium">Tiles: </span>
+                          {area.tileCount} tiles
+                        </p>
+                        <p>
+                          <span className="font-medium">Size: </span>
+                          {formatBytes(area.size)}
+                        </p>
+                        <p>
+                          <span className="font-medium">Downloaded: </span>
+                          {formatDate(area.downloadedAt)}
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => handleDelete(area.id)}
+                      className="p-2 text-red-600 hover:bg-red-50 rounded-lg"
+                    >
+                      <Trash2 className="w-5 h-5" />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
 
-      {/* 在線/離線指示器 */}
-      <div className="absolute bottom-4 left-4 bg-white px-3 py-2 rounded-lg shadow-lg flex items-center gap-2">
-        {isOnline ? (
-          <>
-            <Wifi className="w-4 h-4 text-green-500" />
-            <span className="text-sm font-medium">在線</span>
-          </>
-        ) : (
-          <>
-            <WifiOff className="w-4 h-4 text-orange-500" />
-            <span className="text-sm font-medium">離線</span>
-          </>
-        )}
+        {/* 使用說明 */}
+        <div className="bg-blue-50 rounded-lg p-4 text-sm text-black">
+          <p className="font-semibold mb-2">💡 Usage Tips:</p>
+          <ul className="space-y-1 list-disc list-inside">
+            <li>Offline maps can be viewed without network connection</li>
+            <li>Includes map tiles, meetup points and member locations</li>
+            <li>Update regularly to get the latest data</li>
+            <li>Delete unused areas to save storage space</li>
+          </ul>
+        </div>
       </div>
     </div>
   );
 }
-
-
 

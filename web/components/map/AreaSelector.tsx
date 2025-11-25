@@ -32,6 +32,16 @@ export function AreaSelector({ map, mapboxToken, onDownloadStart, onCancel }: Ar
   const rectangleRef = useRef<mapboxgl.Marker | null>(null);
   const startPoint = useRef<{ lng: number; lat: number } | null>(null);
 
+  // 設定預設位置為加州
+  useEffect(() => {
+    // Fly to California when selector opens
+    map.flyTo({
+      center: [-119.4179, 36.7783], // California center coordinates
+      zoom: 6,
+      duration: 1500
+    });
+  }, [map]);
+
   useEffect(() => {
     if (!isSelecting) return;
 
@@ -123,7 +133,7 @@ export function AreaSelector({ map, mapboxToken, onDownloadStart, onCancel }: Ar
 
     const area: DownloadedArea = {
       id: Date.now().toString(),
-      name: areaName || '未命名區域',
+      name: areaName || 'Unnamed Area',
       bounds,
       center: {
         lat: (bounds.north + bounds.south) / 2,
@@ -141,22 +151,22 @@ export function AreaSelector({ map, mapboxToken, onDownloadStart, onCancel }: Ar
   return (
     <div className="absolute top-4 right-4 bg-white rounded-lg shadow-lg p-4 z-10 w-80">
       <div className="flex items-center justify-between mb-4">
-        <h3 className="text-lg font-semibold flex items-center gap-2">
+        <h3 className="text-lg font-semibold flex items-center gap-2 text-black">
           <Square className="w-5 h-5" />
-          下載離線地圖
+          Download Offline Map
         </h3>
         <button
           onClick={onCancel}
           className="p-1 hover:bg-gray-100 rounded"
         >
-          <X className="w-5 h-5" />
+          <X className="w-5 h-5 text-black" />
         </button>
       </div>
 
       {!bounds ? (
         <div className="space-y-4">
-          <p className="text-sm text-gray-600">
-            在地圖上拖曳選擇要下載的區域
+          <p className="text-sm text-black">
+            Drag on the map to select the area to download
           </p>
           <button
             onClick={handleStartSelection}
@@ -164,32 +174,32 @@ export function AreaSelector({ map, mapboxToken, onDownloadStart, onCancel }: Ar
             className={`
               w-full px-4 py-2 rounded-lg font-semibold
               ${isSelecting
-                ? 'bg-gray-300 cursor-not-allowed'
+                ? 'bg-gray-300 cursor-not-allowed text-black'
                 : 'bg-blue-500 hover:bg-blue-600 text-white'
               }
             `}
           >
-            {isSelecting ? '請在地圖上選擇區域...' : '開始選擇'}
+            {isSelecting ? 'Select area on map...' : 'Start Selection'}
           </button>
         </div>
       ) : (
         <div className="space-y-4">
           <div>
-            <label className="block text-sm font-medium mb-1">區域名稱</label>
+            <label className="block text-sm font-medium mb-1 text-black">Area Name</label>
             <input
               type="text"
               value={areaName}
               onChange={(e) => setAreaName(e.target.value)}
-              placeholder="例如：台北市中心"
-              className="w-full px-3 py-2 border rounded-lg"
+              placeholder="e.g., San Francisco Downtown"
+              className="w-full px-3 py-2 border rounded-lg text-black"
             />
           </div>
 
           {estimatedSize && (
-            <div className="bg-blue-50 p-3 rounded-lg text-sm">
-              <p className="font-medium mb-1">預估下載大小：</p>
-              <p>圖磚數量：{estimatedSize.tileCount} 個</p>
-              <p>檔案大小：約 {estimatedSize.estimatedSize}</p>
+            <div className="bg-blue-50 p-3 rounded-lg text-sm text-black">
+              <p className="font-medium mb-1">Estimated Download Size:</p>
+              <p>Tiles: {estimatedSize.tileCount} tiles</p>
+              <p>Size: approx. {estimatedSize.estimatedSize}</p>
             </div>
           )}
 
@@ -200,16 +210,16 @@ export function AreaSelector({ map, mapboxToken, onDownloadStart, onCancel }: Ar
                 setEstimatedSize(null);
                 setAreaName('');
               }}
-              className="flex-1 px-4 py-2 border rounded-lg hover:bg-gray-50"
+              className="flex-1 px-4 py-2 border rounded-lg hover:bg-gray-50 text-black"
             >
-              重選
+              Reselect
             </button>
             <button
               onClick={handleDownload}
               className="flex-1 px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg font-semibold flex items-center justify-center gap-2"
             >
               <Download className="w-4 h-4" />
-              下載
+              Download
             </button>
           </div>
         </div>

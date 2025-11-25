@@ -22,11 +22,11 @@ export function DownloadProgress({ progress, onClose }: DownloadProgressProps) {
           {status === 'completed' && <CheckCircle className="w-5 h-5 text-green-500" />}
           {status === 'failed' && <XCircle className="w-5 h-5 text-red-500" />}
           
-          <span className="font-semibold">
-            {status === 'preparing' && '準備下載...'}
-            {status === 'downloading' && '下載中'}
-            {status === 'completed' && '下載完成'}
-            {status === 'failed' && '下載失敗'}
+          <span className="font-semibold text-black">
+            {status === 'preparing' && 'Preparing Download...'}
+            {status === 'downloading' && 'Downloading'}
+            {status === 'completed' && 'Download Complete'}
+            {status === 'failed' && 'Download Failed'}
           </span>
         </div>
 
@@ -55,23 +55,23 @@ export function DownloadProgress({ progress, onClose }: DownloadProgressProps) {
       </div>
 
       {/* 詳細資訊 */}
-      <div className="text-sm text-gray-600 space-y-1">
+      <div className="text-sm text-black space-y-1">
         {status === 'downloading' && (
           <>
-            <p>{percentage}% 完成</p>
-            <p>已下載 {downloadedTiles} / {totalTiles} 個圖磚</p>
+            <p>{percentage}% Complete</p>
+            <p>Downloaded {downloadedTiles} / {totalTiles} tiles</p>
           </>
         )}
 
         {status === 'completed' && (
           <p className="text-green-600 font-medium">
-            ✓ 已成功下載 {totalTiles} 個圖磚
+            ✓ Successfully downloaded {totalTiles} tiles
           </p>
         )}
 
         {status === 'failed' && error && (
           <p className="text-red-600">
-            錯誤：{error}
+            Error: {error}
           </p>
         )}
       </div>
