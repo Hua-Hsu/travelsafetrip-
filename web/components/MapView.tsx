@@ -164,7 +164,15 @@ const MapView = forwardRef<MapViewRef, MapViewProps>(({
       map.current?.remove();
       map.current = null;
     };
-  }, [onMapLoad]); // 🆕 Week 8: 加入 onMapLoad 到 dependency array
+  }, []); // ✅ 空依賴數組 - 只在組件掛載時執行一次
+
+  // 🆕 Week 8: 獨立的 useEffect 來處理 onMapLoad callback
+  useEffect(() => {
+    if (mapLoaded && map.current && onMapLoad) {
+      console.log('Calling onMapLoad with map instance');
+      onMapLoad(map.current);
+    }
+  }, [mapLoaded]); // 只在地圖載入狀態改變時執行
 
   // 更新集合點標記
   useEffect(() => {
