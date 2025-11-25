@@ -59,6 +59,15 @@ export function AreaSelector({ map, mapboxToken, onDownloadStart, onCancel }: Ar
     
     canvas.style.cursor = 'crosshair';
 
+    // 🔧 禁用地圖拖動、縮放和旋轉
+    map.dragPan.disable();
+    map.scrollZoom.disable();
+    map.boxZoom.disable();
+    map.dragRotate.disable();
+    map.keyboard.disable();
+    map.doubleClickZoom.disable();
+    map.touchZoomRotate.disable();
+
     let rectangle: HTMLDivElement | null = null;
 
     const onMouseDown = (e: mapboxgl.MapMouseEvent) => {
@@ -97,6 +106,16 @@ export function AreaSelector({ map, mapboxToken, onDownloadStart, onCancel }: Ar
       if (!startPoint.current) return;
 
       map.off('mousemove', onMouseMove);
+      
+      // 🔧 重新啟用地圖交互
+      map.dragPan.enable();
+      map.scrollZoom.enable();
+      map.boxZoom.enable();
+      map.dragRotate.enable();
+      map.keyboard.enable();
+      map.doubleClickZoom.enable();
+      map.touchZoomRotate.enable();
+      
       canvas.style.cursor = '';
 
       // 計算邊界
@@ -129,6 +148,16 @@ export function AreaSelector({ map, mapboxToken, onDownloadStart, onCancel }: Ar
       try {
         map.off('mousedown', onMouseDown);
         map.off('mousemove', onMouseMove);
+        
+        // 🔧 重新啟用地圖交互
+        map.dragPan.enable();
+        map.scrollZoom.enable();
+        map.boxZoom.enable();
+        map.dragRotate.enable();
+        map.keyboard.enable();
+        map.doubleClickZoom.enable();
+        map.touchZoomRotate.enable();
+        
         if (canvas) {
           canvas.style.cursor = '';
         }
