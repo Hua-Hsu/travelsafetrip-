@@ -1,0 +1,9 @@
+{
+  "dependencies": {
+    "lucide-react": "^0.554.0",
+    "mapbox-gl": "^3.16.0"
+  },
+  "devDependencies": {
+    "@types/mapbox-gl": "^3.4.1"
+  }
+}
