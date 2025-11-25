@@ -18,7 +18,7 @@ import { useOfflineMap } from '@/hooks/useOfflineMap';
 import { useNetworkStatus } from '@/hooks/useNetworkStatus';
 
 // Mapbox token
-mapboxgl.accessToken = process.env.NEXT_PUBLIC_MAPBOX_TOKEN!;
+mapboxgl.accessToken = process.env.NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN!;
 
 export default function MapPage() {
   const params = useParams();
@@ -45,7 +45,7 @@ export default function MapPage() {
     cacheMeetupPoint
   } = useOfflineMap({
     groupId,
-    mapboxToken: process.env.NEXT_PUBLIC_MAPBOX_TOKEN!,
+    mapboxToken: process.env.NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN!,
     map: map.current
   });
 
@@ -195,7 +195,7 @@ export default function MapPage() {
       {showAreaSelector && map.current && (
         <AreaSelector
           map={map.current}
-          mapboxToken={process.env.NEXT_PUBLIC_MAPBOX_TOKEN!}
+          mapboxToken={process.env.NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN!}
           onDownloadStart={(area) => {
             setShowAreaSelector(false);
             downloadArea(area);
