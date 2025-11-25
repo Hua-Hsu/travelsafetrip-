@@ -1013,6 +1013,16 @@ export default function GroupMapPage() {
         />
       )}
 
+      {/* 如果地圖還沒載入，顯示提示 */}
+      {showAreaSelector && !mapInstance && (
+        <div className="fixed top-4 right-4 bg-white rounded-lg shadow-lg p-4 z-50 w-80">
+          <div className="flex items-center gap-3">
+            <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-500"></div>
+            <span className="text-black">Loading map...</span>
+          </div>
+        </div>
+      )}
+
       {/* 🆕 Week 8: 下載進度 */}
       {downloadProgress && (
         <DownloadProgress

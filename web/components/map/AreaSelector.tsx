@@ -34,18 +34,29 @@ export function AreaSelector({ map, mapboxToken, onDownloadStart, onCancel }: Ar
 
   // 設定預設位置為加州
   useEffect(() => {
+    if (!map) return;
+    
     // Fly to California when selector opens
-    map.flyTo({
-      center: [-119.4179, 36.7783], // California center coordinates
-      zoom: 6,
-      duration: 1500
-    });
+    try {
+      map.flyTo({
+        center: [-119.4179, 36.7783], // California center coordinates
+        zoom: 6,
+        duration: 1500
+      });
+    } catch (error) {
+      console.error('Error flying to California:', error);
+    }
   }, [map]);
 
   useEffect(() => {
-    if (!isSelecting) return;
+    if (!isSelecting || !map) return;
 
     const canvas = map.getCanvas();
+    if (!canvas) {
+      console.error('Map canvas not found');
+      return;
+    }
+    
     canvas.style.cursor = 'crosshair';
 
     let rectangle: HTMLDivElement | null = null;
@@ -113,11 +124,19 @@ export function AreaSelector({ map, mapboxToken, onDownloadStart, onCancel }: Ar
     map.on('mousedown', onMouseDown);
 
     return () => {
-      map.off('mousedown', onMouseDown);
-      map.off('mousemove', onMouseMove);
-      canvas.style.cursor = '';
-      if (rectangle && rectangle.parentElement) {
-        rectangle.parentElement.removeChild(rectangle);
+      if (!map) return;
+      
+      try {
+        map.off('mousedown', onMouseDown);
+        map.off('mousemove', onMouseMove);
+        if (canvas) {
+          canvas.style.cursor = '';
+        }
+        if (rectangle && rectangle.parentElement) {
+          rectangle.parentElement.removeChild(rectangle);
+        }
+      } catch (error) {
+        console.error('Cleanup error:', error);
       }
     };
   }, [isSelecting, map, mapboxToken]);
@@ -129,7 +148,7 @@ export function AreaSelector({ map, mapboxToken, onDownloadStart, onCancel }: Ar
   };
 
   const handleDownload = () => {
-    if (!bounds) return;
+    if (!bounds || !map) return;
 
     const area: DownloadedArea = {
       id: Date.now().toString(),
