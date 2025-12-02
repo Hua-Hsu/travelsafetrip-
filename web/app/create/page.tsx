@@ -26,13 +26,16 @@ export default function CreateGroupPage() {
     setLoading(true);
     setError('');
     try {
-      // 創建群組
+      // 1. 取得用戶 session
+      const { data: { session } } = await supabase.auth.getSession();
+      
+      // 2. 創建群組
       const { data: groupData, error: createError } = await supabase.functions.invoke('create-group', {
         body: { name: groupName },
       });
       if (createError) throw createError;
       
-      // 自動將創建者加入群組
+      // 3. 自動將創建者加入群組並設為 leader
       const deviceId = generateDeviceId();
       const deviceName = navigator.userAgent.split(' ').slice(0, 3).join(' ');
       
@@ -40,8 +43,10 @@ export default function CreateGroupPage() {
         .from('group_members')
         .insert({
           group_id: groupData.id,
+          user_id: session?.user?.id || null,  // 新增：加入 user_id
           device_id: deviceId,
           device_name: deviceName,
+          role: 'leader',  // ⭐ 重點：自動設為 leader
         });
 
       if (joinError) {
@@ -49,7 +54,7 @@ export default function CreateGroupPage() {
         // 即使加入失敗也繼續，因為群組已經創建了
       }
       
-      // 直接跳轉到聊天室
+      // 4. 直接跳轉到聊天室
       router.push(`/groups/${groupData.id}`);
     } catch (err: any) {
       setError(err.message || 'Failed to create group');
@@ -91,3 +96,4 @@ export default function CreateGroupPage() {
     </div>
   );
 }
+
