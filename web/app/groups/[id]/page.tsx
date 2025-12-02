@@ -31,9 +31,7 @@ export default function GroupChatPage() {
     }
     deviceId.current = id;
 
-    // Check if user is leader
     checkLeaderStatus();
-    
     loadGroup();
     loadMessages();
     const unsubscribe = subscribeToMessages();
@@ -53,15 +51,13 @@ export default function GroupChatPage() {
 
   const checkLeaderStatus = async () => {
     try {
-      // 先嘗試用 user_id（如果有登入）
       const { data: { session } } = await supabase.auth.getSession();
       
       let memberData;
       
       if (session?.user?.id) {
-        // 方案 A: 用 user_id 查詢
         console.log('🔍 Using user_id:', session.user.id);
-        const { data, error } = await supabase
+        const { data } = await supabase
           .from('group_members')
           .select('id, role, user_id, device_id')
           .eq('group_id', groupId)
@@ -69,13 +65,11 @@ export default function GroupChatPage() {
           .single();
         
         memberData = data;
-        console.log('🔍 Query by user_id:', memberData);
       } else {
-        // 方案 B: 用 device_id 查詢（沒有登入）
         const currentDeviceId = deviceId.current;
         console.log('🔍 Using device_id:', currentDeviceId);
         
-        const { data, error } = await supabase
+        const { data } = await supabase
           .from('group_members')
           .select('id, role, user_id, device_id')
           .eq('group_id', groupId)
@@ -83,7 +77,6 @@ export default function GroupChatPage() {
           .single();
         
         memberData = data;
-        console.log('🔍 Query by device_id:', memberData);
       }
 
       if (memberData) {
@@ -91,8 +84,6 @@ export default function GroupChatPage() {
         setIsLeader(memberData.role === 'leader');
         console.log('✅ Role:', memberData.role);
         console.log('✅ Is Leader:', memberData.role === 'leader');
-      } else {
-        console.log('❌ No member data found');
       }
     } catch (error) {
       console.error('❌ Error checking leader status:', error);
@@ -120,10 +111,7 @@ export default function GroupChatPage() {
     try {
       const { data, error } = await supabase
         .from('messages')
-        .select(`
-          *,
-          user:group_members!user_id(name)
-        `)
+        .select('*')
         .eq('group_id', groupId)
         .order('created_at', { ascending: true });
 
@@ -145,20 +133,10 @@ export default function GroupChatPage() {
           table: 'messages',
           filter: `group_id=eq.${groupId}`,
         },
-        async (payload) => {
-          // Fetch the user name for the new message
-          const { data: userData } = await supabase
-            .from('group_members')
-            .select('name')
-            .eq('id', payload.new.user_id)
-            .single();
-
+        (payload) => {
           setMessages((current) => [
             ...current,
-            {
-              ...payload.new,
-              user: userData,
-            } as ExtendedMessage,
+            payload.new as ExtendedMessage,
           ]);
         }
       )
@@ -176,20 +154,28 @@ export default function GroupChatPage() {
 
     setSending(true);
     try {
-      const { error } = await supabase.from('messages').insert({
+      const messageData: any = {
         group_id: groupId,
-        user_id: userId,
         device_id: deviceId.current,
         device_name: navigator.userAgent.substring(0, 50),
         content: newMessage.trim(),
         message_type: 'text',
-      });
+      };
+      
+      console.log('📤 Sending message:', messageData);
+      
+      const { error } = await supabase.from('messages').insert(messageData);
 
-      if (error) throw error;
+      if (error) {
+        console.error('❌ Send error:', error);
+        throw error;
+      }
+      
+      console.log('✅ Message sent successfully');
       setNewMessage('');
     } catch (error) {
       console.error('Error sending message:', error);
-      alert('Failed to send message');
+      alert('Failed to send message: ' + (error as any).message);
     } finally {
       setSending(false);
     }
@@ -219,7 +205,6 @@ export default function GroupChatPage() {
 
   return (
     <div className="max-w-4xl mx-auto h-[calc(100vh-8rem)] flex flex-col">
-      {/* Header - 原來的樣式 */}
       <div className="bg-white rounded-t-lg shadow-md p-4 mb-0">
         <div className="flex items-center justify-between">
           <div>
@@ -230,9 +215,7 @@ export default function GroupChatPage() {
             <p className="text-sm text-gray-500">Code: {group.invite_code}</p>
           </div>
           
-          {/* 按鈕組 - 保留原有 + 新增 Leader */}
           <div className="flex gap-2">
-            {/* 原有的地圖按鈕 */}
             <Link
               href={`/groups/${groupId}/map`}
               className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition text-sm font-semibold flex items-center gap-2"
@@ -243,7 +226,6 @@ export default function GroupChatPage() {
               Map
             </Link>
             
-            {/* 原有的 QR Code 按鈕 */}
             <button
               onClick={() => setShowQR(!showQR)}
               className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition text-sm font-semibold"
@@ -251,7 +233,6 @@ export default function GroupChatPage() {
               {showQR ? 'Hide' : 'QR'}
             </button>
             
-            {/* 新增：Leader 按鈕 (只有 leader 看得到) */}
             {isLeader && (
               <Link
                 href={`/groups/${groupId}/leader-overview-map`}
@@ -263,7 +244,6 @@ export default function GroupChatPage() {
           </div>
         </div>
 
-        {/* 原有的 QR Code 顯示區域 */}
         {showQR && (
           <div className="mt-4 p-4 bg-gray-50 rounded-lg border border-gray-200">
             <h3 className="text-lg font-semibold mb-3 text-center text-black">Invite Others</h3>
@@ -291,7 +271,6 @@ export default function GroupChatPage() {
         )}
       </div>
 
-      {/* Messages - 原來的樣式 + MessageCard */}
       <div className="flex-1 bg-white shadow-md p-4 overflow-y-auto">
         {messages.length === 0 ? (
           <div className="text-center py-8 text-gray-500">
@@ -300,12 +279,10 @@ export default function GroupChatPage() {
         ) : (
           <div className="space-y-3">
             {messages.map((message) => {
-              // 如果是特殊訊息類型，使用 MessageCard
               if (message.message_type && message.message_type !== 'text') {
                 return <MessageCard key={message.id} message={message} />;
               }
               
-              // 原有的一般訊息顯示方式
               const isMe = message.device_id === deviceId.current;
               return (
                 <div
@@ -321,7 +298,7 @@ export default function GroupChatPage() {
                   >
                     {!isMe && (
                       <p className="text-xs opacity-75 mb-1">
-                        {message.device_name || message.user?.name || 'Unknown'}
+                        {message.device_name || 'Unknown'}
                       </p>
                     )}
                     <p className="break-words">{message.content}</p>
@@ -340,7 +317,6 @@ export default function GroupChatPage() {
         )}
       </div>
 
-      {/* Input - 原來的樣式 */}
       <form
         onSubmit={sendMessage}
         className="bg-white rounded-b-lg shadow-md p-4"
