@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState, useRef } from 'react';
+import { useParams } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import mapboxgl from 'mapbox-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
@@ -26,16 +27,15 @@ interface MeetupPoint {
   address?: string;
 }
 
-interface LeaderOverviewMapProps {
-  groupId: string;
-  userId: string;
-}
-
-export default function LeaderOverviewMap({ groupId, userId }: LeaderOverviewMapProps) {
+export default function LeaderOverviewMap() {
+  const params = useParams();
+  const groupId = params.id as string;
+  
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<mapboxgl.Map | null>(null);
   const markers = useRef<{ [key: string]: mapboxgl.Marker }>({});
   
+  const [userId, setUserId] = useState<string>('');
   const [members, setMembers] = useState<Member[]>([]);
   const [meetupPoint, setMeetupPoint] = useState<MeetupPoint | null>(null);
   const [stats, setStats] = useState({
@@ -45,6 +45,28 @@ export default function LeaderOverviewMap({ groupId, userId }: LeaderOverviewMap
     avgDistance: 0,
     farthest: 0,
   });
+
+  // Get user ID from session
+  useEffect(() => {
+    const getUserId = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+
+      // Get member ID
+      const { data: memberData } = await supabase
+        .from('group_members')
+        .select('id')
+        .eq('group_id', groupId)
+        .eq('user_id', session.user.id)
+        .single();
+
+      if (memberData) {
+        setUserId(memberData.id);
+      }
+    };
+
+    getUserId();
+  }, [groupId]);
 
   // Calculate distance between two points (Haversine formula)
   const calculateDistance = (
@@ -243,11 +265,13 @@ export default function LeaderOverviewMap({ groupId, userId }: LeaderOverviewMap
       <div className="bg-white border-b border-gray-200 p-4">
         <div className="flex items-center justify-between">
           <h1 className="text-2xl font-bold text-black">Leader Overview Map</h1>
-          <PushMeetupReminder
-            groupId={groupId}
-            userId={userId}
-            meetupPoint={meetupPoint || undefined}
-          />
+          {userId && (
+            <PushMeetupReminder
+              groupId={groupId}
+              userId={userId}
+              meetupPoint={meetupPoint || undefined}
+            />
+          )}
         </div>
       </div>
 
