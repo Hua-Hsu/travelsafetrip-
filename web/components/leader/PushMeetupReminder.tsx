@@ -29,19 +29,28 @@ export default function PushMeetupReminder({
     setIsSending(true);
 
     try {
+      // Get device_id from localStorage
+      const deviceId = localStorage.getItem('device_id');
+      
       // Send reminder message
       const reminderMessage = MESSAGE_TEMPLATES.MEETUP_REMINDER(reminderTime || undefined);
       
+      const messageData: any = {
+        group_id: groupId,
+        device_id: deviceId,
+        device_name: 'Leader',
+        content: reminderMessage.content,
+        message_type: reminderMessage.message_type,
+      };
+      
       const { error: reminderError } = await supabase
         .from('messages')
-        .insert({
-          group_id: groupId,
-          user_id: userId,
-          content: reminderMessage.content,
-          message_type: reminderMessage.message_type,
-        });
+        .insert(messageData);
 
-      if (reminderError) throw reminderError;
+      if (reminderError) {
+        console.error('Reminder error:', reminderError);
+        throw reminderError;
+      }
 
       // Send navigation link if requested and meetup point exists
       if (includeNavigation && meetupPoint) {
@@ -53,17 +62,23 @@ export default function PushMeetupReminder({
           meetupPoint.address
         );
 
+        const navMessageData: any = {
+          group_id: groupId,
+          device_id: deviceId,
+          device_name: 'Leader',
+          content: navMessage.content,
+          message_type: navMessage.message_type,
+          action_data: navMessage.action_data,
+        };
+
         const { error: navError } = await supabase
           .from('messages')
-          .insert({
-            group_id: groupId,
-            user_id: userId,
-            content: navMessage.content,
-            message_type: navMessage.message_type,
-            action_data: navMessage.action_data,
-          });
+          .insert(navMessageData);
 
-        if (navError) throw navError;
+        if (navError) {
+          console.error('Navigation error:', navError);
+          throw navError;
+        }
       }
 
       // Close dialog and reset

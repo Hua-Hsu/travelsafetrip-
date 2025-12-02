@@ -1,3 +1,5 @@
+// web/app/groups/[id]/page.tsx
+
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
@@ -31,12 +33,50 @@ export default function GroupChatPage() {
     }
     deviceId.current = id;
 
+    // Check if user is leader
     checkLeaderStatus();
+    
     loadGroup();
     loadMessages();
     const unsubscribe = subscribeToMessages();
     
+    // 心跳機制：定期更新 is_online 狀態
+    const updateOnlineStatus = async () => {
+      try {
+        await supabase
+          .from('group_members')
+          .update({ 
+            is_online: true,
+            last_seen: new Date().toISOString()
+          })
+          .eq('device_id', deviceId.current)
+          .eq('group_id', groupId);
+      } catch (error) {
+        console.error('Error updating online status:', error);
+      }
+    };
+
+    // 立即更新一次
+    updateOnlineStatus();
+
+    // 每 30 秒更新一次
+    const heartbeatInterval = setInterval(updateOnlineStatus, 30000);
+
+    // 當離開頁面時設為離線
+    const handleBeforeUnload = async () => {
+      await supabase
+        .from('group_members')
+        .update({ is_online: false })
+        .eq('device_id', deviceId.current)
+        .eq('group_id', groupId);
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    
     return () => {
+      clearInterval(heartbeatInterval);
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+      handleBeforeUnload(); // 設為離線
       if (unsubscribe) unsubscribe();
     };
   }, [groupId]);
@@ -342,4 +382,5 @@ export default function GroupChatPage() {
     </div>
   );
 }
+
 
