@@ -8,6 +8,8 @@ export interface BaseMessage {
   user_id: string;
   content: string;
   created_at: string;
+  device_id?: string;
+  device_name?: string;
   user?: {
     name: string;
   };
