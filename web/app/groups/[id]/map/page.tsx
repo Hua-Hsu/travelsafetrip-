@@ -4,6 +4,11 @@
 // 包含：原有功能 + Week 8 離線地圖
 // ================================
 
+// ================================
+// Week 5+6+7+8+9: 群組地圖頁面 - 完整整合版（含 Leader Push Reminder）
+// 包含：原有功能 + Week 8 離線地圖 + Week 9 Leader Push Reminder
+// ================================
+
 'use client';
 
 import React, { useEffect, useState, useRef } from 'react';
@@ -23,14 +28,17 @@ import RecommendationCard from '@/components/RecommendationCard';
 import { useOnlineStatus } from '@/hooks/useOnlineStatus';
 import { useAISearch } from '@/hooks/useAISearch';
 
-// 🆕 Week 8: 離線功能組件和 Hooks
+// 🆕 Week 9: 引入訊息模板
+import { MESSAGE_TEMPLATES } from '@/types/message';
+
+// Week 8: 離線功能組件和 Hooks
 import { ConnectionStatus } from '@/components/Ui/ConnectionStatus';
 import { AreaSelector } from '@/components/map/AreaSelector';
 import { DownloadProgress } from '@/components/map/DownloadProgress';
 import { useOfflineMap } from '@/hooks/useOfflineMap';
 import { useNetworkStatus } from '@/hooks/useNetworkStatus';
 
-import { Download, Menu, Wifi, WifiOff } from 'lucide-react';
+import { Download, Menu, Wifi, WifiOff, Bell } from 'lucide-react';
 import {
   MemberLocation,
   LocationData,
@@ -43,7 +51,6 @@ export default function GroupMapPage() {
   const groupId = params.id as string;
   const mapViewRef = useRef<any>(null);
   
-  // 🆕 Week 8: 儲存 Mapbox 地圖實例
   const [mapInstance, setMapInstance] = useState<mapboxgl.Map | null>(null);
 
   const [deviceId, setDeviceId] = useState<string>('');
@@ -54,6 +61,12 @@ export default function GroupMapPage() {
   const [loading, setLoading] = useState(true);
   const [selectedMember, setSelectedMember] = useState<MemberLocation | null>(null);
   const [viewMode, setViewMode] = useState<'map' | 'list'>('map');
+
+  // 🆕 Week 9: Leader 相關狀態
+  const [isLeader, setIsLeader] = useState(false);
+  const [showPushDialog, setShowPushDialog] = useState(false);
+  const [reminderTime, setReminderTime] = useState('');
+  const [isSending, setIsSending] = useState(false);
 
   // 教學和無障礙模式狀態
   const [showTutorial, setShowTutorial] = useState(false);
@@ -67,7 +80,7 @@ export default function GroupMapPage() {
   // 快速分享成功提示
   const [showShareSuccess, setShowShareSuccess] = useState(false);
 
-  // 🆕 Week 8: 離線地圖 UI 狀態
+  // Week 8: 離線地圖 UI 狀態
   const [showAreaSelector, setShowAreaSelector] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
 
@@ -91,7 +104,7 @@ export default function GroupMapPage() {
     isActive: !previewMode && isSharingLocation
   });
 
-  // 🆕 Week 8: 離線地圖功能
+  // Week 8: 離線地圖功能
   const {
     isOfflineMode,
     downloadProgress,
@@ -106,7 +119,7 @@ export default function GroupMapPage() {
     map: mapViewRef.current?.getMap?.()
   });
 
-  // 🆕 Week 8: 網路狀態
+  // Week 8: 網路狀態
   const { isOnline } = useNetworkStatus();
 
   // Week 7: AI 搜尋
@@ -144,6 +157,42 @@ export default function GroupMapPage() {
       setDeviceName(newDeviceName);
     }
   }, []);
+
+  // 🆕 Week 9: 檢查是否為 Leader
+  useEffect(() => {
+    if (!groupId || !deviceId) return;
+
+    const checkLeaderStatus = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      
+      let memberData;
+      
+      if (session?.user?.id) {
+        const { data } = await supabase
+          .from('group_members')
+          .select('role')
+          .eq('group_id', groupId)
+          .eq('user_id', session.user.id)
+          .single();
+        memberData = data;
+      } else {
+        const { data } = await supabase
+          .from('group_members')
+          .select('role')
+          .eq('group_id', groupId)
+          .eq('device_id', deviceId)
+          .single();
+        memberData = data;
+      }
+
+      if (memberData) {
+        setIsLeader(memberData.role === 'leader');
+        console.log('✅ Is Leader:', memberData.role === 'leader');
+      }
+    };
+
+    checkLeaderStatus();
+  }, [groupId, deviceId]);
 
   // 載入隱私設定
   useEffect(() => {
@@ -245,7 +294,7 @@ export default function GroupMapPage() {
     loadGroup();
   }, [groupId, router]);
 
-  // 🆕 Week 8: 處理從離線地圖管理頁面返回時飛到選定區域
+  // Week 8: 處理從離線地圖管理頁面返回時飛到選定區域
   useEffect(() => {
     const viewAreaData = localStorage.getItem('viewOfflineArea');
     if (viewAreaData && mapInstance) {
@@ -253,14 +302,12 @@ export default function GroupMapPage() {
         const area = JSON.parse(viewAreaData);
         console.log('Flying to offline area:', area);
         
-        // 飛到區域中心
         mapInstance.flyTo({
           center: [area.center.lng, area.center.lat],
           zoom: area.zoom || 13,
           duration: 2000
         });
 
-        // 清除標記，避免重複觸發
         localStorage.removeItem('viewOfflineArea');
       } catch (error) {
         console.error('Failed to parse viewOfflineArea:', error);
@@ -421,6 +468,8 @@ export default function GroupMapPage() {
 
       setShowMeetupDialog(false);
       setTempMeetupLocation(null);
+      
+      alert('✅ Meetup point saved successfully!');
     } catch (error) {
       console.error('Failed to set meetup point:', error);
       alert('Failed to set meetup point');
@@ -451,6 +500,80 @@ export default function GroupMapPage() {
   const handleMapLongPress = (latitude: number, longitude: number) => {
     setTempMeetupLocation({ latitude, longitude });
     setShowMeetupDialog(true);
+  };
+
+  // 🆕 Week 9: Push Meetup Reminder 處理函數
+  const handlePushReminder = async (includeNavigation: boolean) => {
+    if (isSending) return;
+    
+    if (includeNavigation && !meetupPoint) {
+      alert('⚠️ Please set a meetup point first before sending navigation link!');
+      return;
+    }
+
+    setIsSending(true);
+
+    try {
+      const deviceIdValue = localStorage.getItem('device_id');
+      
+      // 發送提醒訊息
+      const reminderMessage = MESSAGE_TEMPLATES.MEETUP_REMINDER(reminderTime || undefined);
+      
+      const reminderData: any = {
+        group_id: groupId,
+        device_id: deviceIdValue,
+        device_name: 'Leader',
+        content: reminderMessage.content,
+        message_type: reminderMessage.message_type,
+      };
+      
+      const { error: reminderError } = await supabase
+        .from('messages')
+        .insert(reminderData);
+
+      if (reminderError) {
+        console.error('Reminder error:', reminderError);
+        throw reminderError;
+      }
+
+      // 發送導航連結
+      if (includeNavigation && meetupPoint) {
+        const navMessage = MESSAGE_TEMPLATES.NAVIGATION_LINK(
+          { 
+            latitude: meetupPoint.latitude, 
+            longitude: meetupPoint.longitude 
+          },
+          undefined
+        );
+
+        const navMessageData: any = {
+          group_id: groupId,
+          device_id: deviceIdValue,
+          device_name: 'Leader',
+          content: navMessage.content,
+          message_type: navMessage.message_type,
+          action_data: navMessage.action_data,
+        };
+
+        const { error: navError } = await supabase
+          .from('messages')
+          .insert(navMessageData);
+
+        if (navError) {
+          console.error('Navigation error:', navError);
+          throw navError;
+        }
+      }
+
+      alert('✅ Reminder sent successfully!');
+      setShowPushDialog(false);
+      setReminderTime('');
+    } catch (error: any) {
+      console.error('Failed to send reminder:', error);
+      alert('Failed to send reminder: ' + error.message);
+    } finally {
+      setIsSending(false);
+    }
   };
 
   const handleTutorialComplete = () => {
@@ -531,7 +654,7 @@ export default function GroupMapPage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* 🆕 Week 8: 連線狀態指示器 */}
+      {/* Week 8: 連線狀態指示器 */}
       <ConnectionStatus />
 
       {/* 教學覆蓋層 */}
@@ -567,7 +690,7 @@ export default function GroupMapPage() {
         </div>
       )}
 
-      {/* 🆕 Week 8: 離線模式提示橫幅 */}
+      {/* Week 8: 離線模式提示橫幅 */}
       {isOfflineMode && (
         <div className="bg-orange-500 text-black px-4 py-2 text-center font-semibold flex items-center justify-center gap-2">
           <WifiOff className="w-5 h-5" />
@@ -596,6 +719,18 @@ export default function GroupMapPage() {
             </div>
 
             <div className="flex gap-2">
+              {/* 🆕 Week 9: Push Reminder 按鈕（只有 Leader 且有集合點時顯示） */}
+              {isLeader && meetupPoint && (
+                <button
+                  onClick={() => setShowPushDialog(true)}
+                  className="px-3 py-2 bg-purple-100 hover:bg-purple-200 text-purple-600 rounded-lg transition-colors flex items-center gap-2"
+                  title="Push Meetup Reminder"
+                >
+                  <Bell className="w-5 h-5" />
+                  <span className="text-sm font-semibold hidden md:inline">Push Reminder</span>
+                </button>
+              )}
+
               {/* 隱私設定按鈕 */}
               <button
                 onClick={() => setShowPrivacySettings(true)}
@@ -614,7 +749,7 @@ export default function GroupMapPage() {
                 </span>
               </button>
 
-              {/* 🆕 Week 8: 下載離線地圖按鈕 */}
+              {/* Week 8: 下載離線地圖按鈕 */}
               {!isOfflineMode && (
                 <button
                   onClick={() => setShowAreaSelector(true)}
@@ -625,7 +760,7 @@ export default function GroupMapPage() {
                 </button>
               )}
 
-              {/* 🆕 Week 8: 選單按鈕 */}
+              {/* Week 8: 選單按鈕 */}
               <button
                 onClick={() => setShowMenu(!showMenu)}
                 className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
@@ -683,7 +818,7 @@ export default function GroupMapPage() {
         </div>
       </header>
 
-      {/* 🆕 Week 8: 選單 */}
+      {/* Week 8: 選單 */}
       {showMenu && (
         <div className="fixed top-24 right-4 bg-white rounded-lg shadow-lg p-2 w-48 z-20">
           <button
@@ -980,7 +1115,7 @@ export default function GroupMapPage() {
               </>
             )}
 
-            {/* 🆕 Week 8: 在線/離線指示器 */}
+            {/* Week 8: 在線/離線指示器 */}
             <div className="bg-white rounded-lg shadow p-3 flex items-center justify-between">
               <span className="text-sm font-medium text-black">Connection Status:</span>
               <div className="flex items-center gap-2">
@@ -1024,7 +1159,7 @@ export default function GroupMapPage() {
         </div>
       </main>
 
-      {/* 🆕 Week 8: 區域選擇器 */}
+      {/* Week 8: 區域選擇器 */}
       {showAreaSelector && mapInstance && (
         <AreaSelector
           map={mapInstance}
@@ -1047,7 +1182,7 @@ export default function GroupMapPage() {
         </div>
       )}
 
-      {/* 🆕 Week 8: 下載進度 */}
+      {/* Week 8: 下載進度 */}
       {downloadProgress && (
         <DownloadProgress
           progress={downloadProgress}
@@ -1055,6 +1190,86 @@ export default function GroupMapPage() {
         />
       )}
 
+      {/* 🆕 Week 9: Push Reminder 對話框 */}
+      {showPushDialog && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg p-6 max-w-md w-full">
+            <h3 className="text-lg font-semibold mb-4 text-gray-900">Push Meetup Reminder</h3>
+            
+            <p className="text-sm text-gray-600 mb-4">
+              Send a reminder to all group members to return to the meetup point.
+            </p>
+
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Meetup Time (Optional)
+              </label>
+              <input
+                type="time"
+                value={reminderTime}
+                onChange={(e) => setReminderTime(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 text-black"
+                placeholder="HH:MM"
+              />
+            </div>
+
+            {meetupPoint && (
+              <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded-lg">
+                <p className="text-sm text-green-700">
+                  ✅ Meetup point is set at: {meetupPoint.latitude.toFixed(4)}, {meetupPoint.longitude.toFixed(4)}
+                </p>
+              </div>
+            )}
+
+            <div className="flex flex-col gap-2">
+              <button
+                onClick={() => handlePushReminder(false)}
+                disabled={isSending}
+                className="w-full px-4 py-3 bg-purple-500 text-white rounded-lg hover:bg-purple-600 disabled:bg-gray-300 font-semibold flex items-center justify-center gap-2"
+              >
+                {isSending ? (
+                  <>
+                    <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
+                    <span>Sending...</span>
+                  </>
+                ) : (
+                  <>
+                    <Bell className="w-5 h-5" />
+                    <span>Send Reminder Only</span>
+                  </>
+                )}
+              </button>
+
+              <button
+                onClick={() => handlePushReminder(true)}
+                disabled={isSending || !meetupPoint}
+                className="w-full px-4 py-3 bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:bg-gray-300 font-semibold"
+              >
+                Send with Navigation Link
+              </button>
+
+              <button
+                onClick={() => {
+                  setShowPushDialog(false);
+                  setReminderTime('');
+                }}
+                disabled={isSending}
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg hover:bg-gray-50 disabled:bg-gray-100"
+              >
+                Cancel
+              </button>
+            </div>
+
+            {!meetupPoint && (
+              <p className="text-xs text-orange-600 mt-3">
+                ⚠️ Navigation link unavailable - meetup point not set
+              </p>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* 設定集合點對話框 */}
       {showMeetupDialog && tempMeetupLocation && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-lg p-6 max-w-md w-full">
