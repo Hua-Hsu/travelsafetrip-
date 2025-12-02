@@ -1,6 +1,3 @@
-// web/app/groups/[id]/leader-overview-map/page.tsx
-
-
 'use client';
 
 import { useEffect, useState, useRef } from 'react';
@@ -49,22 +46,41 @@ export default function LeaderOverviewMap() {
     farthest: 0,
   });
 
-  // Get user ID from session
+  // Get user ID from session or device_id
   useEffect(() => {
     const getUserId = async () => {
       const { data: { session } } = await supabase.auth.getSession();
-      if (!session) return;
-
-      // Get member ID
-      const { data: memberData } = await supabase
-        .from('group_members')
-        .select('id')
-        .eq('group_id', groupId)
-        .eq('user_id', session.user.id)
-        .single();
+      
+      let memberData;
+      
+      if (session?.user?.id) {
+        // 如果有登入，用 user_id 查詢
+        const { data } = await supabase
+          .from('group_members')
+          .select('id')
+          .eq('group_id', groupId)
+          .eq('user_id', session.user.id)
+          .single();
+        memberData = data;
+      } else {
+        // 如果沒登入，用 device_id 查詢
+        const deviceId = localStorage.getItem('device_id');
+        if (deviceId) {
+          const { data } = await supabase
+            .from('group_members')
+            .select('id')
+            .eq('group_id', groupId)
+            .eq('device_id', deviceId)
+            .single();
+          memberData = data;
+        }
+      }
 
       if (memberData) {
         setUserId(memberData.id);
+        console.log('✅ User ID set:', memberData.id);
+      } else {
+        console.log('❌ No member found');
       }
     };
 
@@ -123,12 +139,11 @@ export default function LeaderOverviewMap() {
         .select('id, role, latitude, longitude, is_online, is_sharing_location, last_seen, device_id')
         .eq('group_id', groupId);
 
+      console.log('📊 Members count:', membersData?.length || 0);
       console.log('📊 Members data:', membersData);
-      console.log('❌ Members error:', membersError);
-
+      
       if (membersError) {
-        console.error('Error fetching members:', membersError);
-        return;
+        console.error('❌ Members error:', membersError);
       }
 
       // Fetch meetup point
@@ -139,13 +154,16 @@ export default function LeaderOverviewMap() {
         .single();
 
       console.log('📍 Group data:', groupData);
-
+      
       if (groupError) {
-        console.error('Error fetching group:', groupError);
-        return;
+        console.error('❌ Group error:', groupError);
       }
 
-      setMembers(membersData || []);
+      // Update state
+      if (membersData) {
+        setMembers(membersData);
+        console.log('✅ Members state updated, count:', membersData.length);
+      }
       
       if (groupData?.meetup_latitude && groupData?.meetup_longitude) {
         setMeetupPoint({
@@ -153,6 +171,9 @@ export default function LeaderOverviewMap() {
           longitude: groupData.meetup_longitude,
           address: groupData.meetup_address,
         });
+        console.log('✅ Meetup point set');
+      } else {
+        console.log('⚠️ No meetup point set');
       }
     };
 
