@@ -1,3 +1,6 @@
+// web/app/groups/[id]/leader-overview-map/page.tsx
+
+
 'use client';
 
 import { useEffect, useState, useRef } from 'react';
@@ -12,13 +15,13 @@ mapboxgl.accessToken = process.env.NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN || '';
 
 interface Member {
   id: string;
-  name: string;
   latitude: number | null;
   longitude: number | null;
   is_online: boolean;
   is_sharing_location: boolean;
   last_seen: string | null;
   role: string;
+  device_id?: string;
 }
 
 interface MeetupPoint {
@@ -112,11 +115,16 @@ export default function LeaderOverviewMap() {
   // Fetch group data
   useEffect(() => {
     const fetchData = async () => {
+      console.log('🔍 Fetching data for group:', groupId);
+      
       // Fetch members
       const { data: membersData, error: membersError } = await supabase
         .from('group_members')
-        .select('id, name, latitude, longitude, is_online, is_sharing_location, last_seen, role')
+        .select('id, role, latitude, longitude, is_online, is_sharing_location, last_seen, device_id')
         .eq('group_id', groupId);
+
+      console.log('📊 Members data:', membersData);
+      console.log('❌ Members error:', membersError);
 
       if (membersError) {
         console.error('Error fetching members:', membersError);
@@ -129,6 +137,8 @@ export default function LeaderOverviewMap() {
         .select('meetup_latitude, meetup_longitude, meetup_address')
         .eq('id', groupId)
         .single();
+
+      console.log('📍 Group data:', groupData);
 
       if (groupError) {
         console.error('Error fetching group:', groupError);
@@ -160,6 +170,7 @@ export default function LeaderOverviewMap() {
           filter: `group_id=eq.${groupId}`,
         },
         () => {
+          console.log('🔄 Real-time update triggered');
           fetchData();
         }
       )
@@ -215,7 +226,7 @@ export default function LeaderOverviewMap() {
           .setPopup(
             new mapboxgl.Popup().setHTML(`
               <div class="text-black">
-                <strong>${member.name}</strong>
+                <strong>${member.device_id || 'Member'}</strong>
                 <p>Role: ${member.role}</p>
                 <p>Status: ${member.is_online ? 'Online' : 'Offline'}</p>
                 <p>Sharing: ${member.is_sharing_location ? 'Yes' : 'No'}</p>
