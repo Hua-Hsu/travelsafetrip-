@@ -26,8 +26,11 @@ export default function CreateGroupPage() {
     setLoading(true);
     setError('');
     try {
-      // 1. 取得用戶 session
+      // 1. 嘗試取得用戶 session（可選）
       const { data: { session } } = await supabase.auth.getSession();
+      
+      console.log('🔍 Session exists:', !!session); // Debug
+      console.log('🔍 User ID:', session?.user?.id || 'none'); // Debug
       
       // 2. 創建群組
       const { data: groupData, error: createError } = await supabase.functions.invoke('create-group', {
@@ -35,30 +38,38 @@ export default function CreateGroupPage() {
       });
       if (createError) throw createError;
       
+      console.log('✅ Group created:', groupData.id); // Debug
+      
       // 3. 自動將創建者加入群組並設為 leader
       const deviceId = generateDeviceId();
       const deviceName = navigator.userAgent.split(' ').slice(0, 3).join(' ');
       
+      const insertData = {
+        group_id: groupData.id,
+        user_id: session?.user?.id || null,  // 如果有登入就用 user_id
+        device_id: deviceId,
+        device_name: deviceName,
+        role: 'leader',  // ⭐ 設為 leader
+      };
+      
+      console.log('🔍 Inserting member data:', insertData); // Debug
+      
       const { error: joinError } = await supabase
         .from('group_members')
-        .insert({
-          group_id: groupData.id,
-          user_id: session?.user?.id || null,  // 新增：加入 user_id
-          device_id: deviceId,
-          device_name: deviceName,
-          role: 'leader',  // ⭐ 重點：自動設為 leader
-        });
+        .insert(insertData);
 
       if (joinError) {
-        console.error('Error auto-joining group:', joinError);
-        // 即使加入失敗也繼續，因為群組已經創建了
+        console.error('❌ Error auto-joining group:', joinError);
+        throw new Error('Failed to join group: ' + joinError.message);
       }
+      
+      console.log('✅ Successfully joined as leader'); // Debug
       
       // 4. 直接跳轉到聊天室
       router.push(`/groups/${groupData.id}`);
     } catch (err: any) {
       setError(err.message || 'Failed to create group');
-      console.error('Error details:', err);
+      console.error('❌ Error details:', err);
     } finally {
       setLoading(false);
     }

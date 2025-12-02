@@ -53,22 +53,49 @@ export default function GroupChatPage() {
 
   const checkLeaderStatus = async () => {
     try {
+      // 先嘗試用 user_id（如果有登入）
       const { data: { session } } = await supabase.auth.getSession();
-      if (!session) return;
-
-      const { data: memberData } = await supabase
-        .from('group_members')
-        .select('id, role')
-        .eq('group_id', groupId)
-        .eq('user_id', session.user.id)
-        .single();
+      
+      let memberData;
+      
+      if (session?.user?.id) {
+        // 方案 A: 用 user_id 查詢
+        console.log('🔍 Using user_id:', session.user.id);
+        const { data, error } = await supabase
+          .from('group_members')
+          .select('id, role, user_id, device_id')
+          .eq('group_id', groupId)
+          .eq('user_id', session.user.id)
+          .single();
+        
+        memberData = data;
+        console.log('🔍 Query by user_id:', memberData);
+      } else {
+        // 方案 B: 用 device_id 查詢（沒有登入）
+        const currentDeviceId = deviceId.current;
+        console.log('🔍 Using device_id:', currentDeviceId);
+        
+        const { data, error } = await supabase
+          .from('group_members')
+          .select('id, role, user_id, device_id')
+          .eq('group_id', groupId)
+          .eq('device_id', currentDeviceId)
+          .single();
+        
+        memberData = data;
+        console.log('🔍 Query by device_id:', memberData);
+      }
 
       if (memberData) {
         setUserId(memberData.id);
         setIsLeader(memberData.role === 'leader');
+        console.log('✅ Role:', memberData.role);
+        console.log('✅ Is Leader:', memberData.role === 'leader');
+      } else {
+        console.log('❌ No member data found');
       }
     } catch (error) {
-      console.error('Error checking leader status:', error);
+      console.error('❌ Error checking leader status:', error);
     }
   };
 
